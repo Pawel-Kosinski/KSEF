@@ -1,0 +1,17 @@
+# Normalizacja końcórek linii (Windows + Linux)
+* text=auto eol=lf
+
+# Windows skrypty
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binaria
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

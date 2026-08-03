@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wirtualny CFO – Dokumentacja techniczna backendu</title>
+  <style>
+    :root {
+      --text: #1a1a2e;
+      --muted: #4a5568;
+      --border: #cbd5e1;
+      --accent: #1d4ed8;
+      --bg-code: #f1f5f9;
+      --bg-table-head: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", Calibri, Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.55;
+      color: var(--text);
+      max-width: 210mm;
+      margin: 0 auto;
+      padding: 18mm 16mm;
+      background: #fff;
+    }
+    h1 { font-size: 22pt; border-bottom: 3px solid var(--accent); padding-bottom: 8px; margin-top: 0; }
+    h2 { font-size: 15pt; color: var(--accent); margin-top: 28px; page-break-after: avoid; }
+    h3 { font-size: 12.5pt; margin-top: 20px; page-break-after: avoid; }
+    h4 { font-size: 11pt; margin-top: 14px; }
+    p { margin: 8px 0; }
+    .meta { color: var(--muted); font-size: 10pt; margin-bottom: 24px; }
+    .toc { background: #f8fafc; border: 1px solid var(--border); padding: 16px 20px; margin: 20px 0 32px; }
+    .toc ol { margin: 0; padding-left: 22px; }
+    .toc li { margin: 4px 0; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    code, pre {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 9pt;
+      background: var(--bg-code);
+    }
+    code { padding: 1px 4px; border-radius: 3px; }
+    pre {
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      page-break-inside: avoid;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 18px;
+      font-size: 10pt;
+      page-break-inside: avoid;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: var(--bg-table-head); font-weight: 600; }
+
+    /* ---- Diagramy (HTML, czytelne w przeglądarce i PDF) ---- */
+    .flow-stack { margin: 16px 0 24px; }
+    .flow-box {
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      background: #f8fafc;
+      page-break-inside: avoid;
+    }
+    .flow-box strong { display: block; font-size: 11pt; color: var(--accent); margin-bottom: 4px; }
+    .flow-box p { margin: 4px 0 8px; font-size: 10pt; color: var(--muted); }
+    .flow-box--input { border-color: #93c5fd; background: #eff6ff; }
+    .flow-box--process { border-color: #86efac; background: #f0fdf4; }
+    .flow-box--data { border-color: #fcd34d; background: #fffbeb; }
+    .flow-box--api { border-color: #c4b5fd; background: #f5f3ff; }
+    .flow-box--consumer { border-color: #94a3b8; background: #f1f5f9; }
+    .flow-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .flow-tags span {
+      font-family: Consolas, monospace;
+      font-size: 8.5pt;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 8px;
+    }
+    .flow-arrow {
+      text-align: center;
+      padding: 8px 0;
+      font-size: 10pt;
+      color: var(--muted);
+      line-height: 1.3;
+    }
+    .flow-arrow .arrow-icon {
+      display: block;
+      font-size: 18pt;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .er-diagram {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      background: #f8fafc;
+      margin: 12px 0 20px;
+      page-break-inside: avoid;
+    }
+    .er-entity {
+      display: inline-block;
+      border: 2px solid var(--accent);
+      border-radius: 6px;
+      padding: 8px 14px;
+      background: #fff;
+      font-weight: 600;
+      font-size: 10.5pt;
+    }
+    .er-entity em { font-weight: normal; font-size: 9pt; color: var(--muted); font-style: normal; display: block; margin-top: 2px; }
+    .er-entity--child { border-color: #64748b; font-weight: 500; }
+    .er-tree { margin-top: 16px; padding-left: 8px; }
+    .er-row { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+    .er-card { flex: 1; min-width: 0; }
+    .er-label {
+      writing-mode: horizontal-tb;
+      font-size: 9pt;
+      color: var(--muted);
+      font-weight: 600;
+      min-width: 36px;
+      text-align: center;
+      padding-top: 10px;
+    }
+    .er-nested { margin-top: 10px; padding-left: 20px; border-left: 3px solid var(--border); }
+    .badge-rls {
+      display: inline-block;
+      font-size: 8pt;
+      font-weight: 600;
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fcd34d;
+      border-radius: 3px;
+      padding: 1px 6px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .badge-no-rls {
+      display: inline-block;
+      font-size: 8pt;
+      font-weight: 600;
+      background: #e2e8f0;
+      color: #475569;
+      border: 1px solid #cbd5e1;
+      border-radius: 3px;
+      padding: 1px 6px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    .seq-flow { margin: 12px 0 20px; }
+    .seq-start {
+      background: var(--accent);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 8px 8px 0 0;
+      font-weight: 600;
+      font-size: 10.5pt;
+    }
+    .seq-step {
+      display: flex;
+      gap: 12px;
+      border: 1px solid var(--border);
+      border-top: none;
+      padding: 12px 14px;
+      background: #fff;
+      page-break-inside: avoid;
+    }
+    .seq-step:last-child { border-radius: 0 0 8px 8px; }
+    .seq-num {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      line-height: 28px;
+      text-align: center;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 50%;
+      font-weight: 700;
+      font-size: 10pt;
+    }
+    .seq-body { flex: 1; min-width: 0; }
+    .seq-body strong { display: block; margin-bottom: 4px; font-size: 10.5pt; }
+    .seq-body ul { margin: 4px 0 0; padding-left: 18px; font-size: 10pt; }
+    .seq-body li { margin: 2px 0; }
+    .seq-sub {
+      margin-top: 8px;
+      padding: 8px 10px;
+      background: #f1f5f9;
+      border-radius: 4px;
+      border-left: 3px solid #86efac;
+      font-size: 9.5pt;
+    }
+
+    .steps-list { margin: 12px 0 20px; counter-reset: ksef-step; }
+    .step-card {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: #fff;
+      page-break-inside: avoid;
+    }
+    .step-card::before {
+      counter-increment: ksef-step;
+      content: counter(ksef-step);
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      line-height: 32px;
+      text-align: center;
+      background: #1e40af;
+      color: #fff;
+      border-radius: 50%;
+      font-weight: 700;
+      font-size: 11pt;
+    }
+    .step-content { flex: 1; }
+    .step-content .method {
+      font-family: Consolas, monospace;
+      font-size: 9.5pt;
+      font-weight: 600;
+      color: #1e40af;
+      margin-bottom: 4px;
+    }
+    .step-content .detail { font-size: 10pt; color: var(--text); margin: 2px 0; }
+    .step-content .result { font-size: 9.5pt; color: var(--muted); margin-top: 4px; }
+
+    .pipeline-h {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin: 12px 0;
+      page-break-inside: avoid;
+    }
+    .pipeline-node {
+      border: 2px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      background: #fff;
+      font-size: 9.5pt;
+      text-align: center;
+      min-width: 90px;
+    }
+    .pipeline-node strong { display: block; font-size: 10pt; margin-bottom: 2px; }
+    .pipeline-node small { color: var(--muted); font-size: 8.5pt; }
+    .pipeline-node--highlight { border-color: var(--accent); background: #eff6ff; }
+    .pipeline-arrow { color: var(--accent); font-size: 14pt; font-weight: bold; padding: 0 2px; }
+
+    .pipeline-v { margin: 12px 0 20px; text-align: center; }
+    .pipeline-v .pipeline-row {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 8px 0;
+    }
+    .pipeline-v .pipeline-down {
+      color: var(--accent);
+      font-size: 16pt;
+      line-height: 1;
+      padding: 4px 0;
+    }
+
+    .http-flow { margin: 12px 0 20px; }
+    .http-step {
+      display: grid;
+      grid-template-columns: 32px 1fr;
+      gap: 12px;
+      margin-bottom: 0;
+      page-break-inside: avoid;
+    }
+    .http-step .dot-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .http-step .dot {
+      width: 14px;
+      height: 14px;
+      background: var(--accent);
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 4px;
+    }
+    .http-step .line {
+      width: 2px;
+      flex: 1;
+      background: var(--border);
+      min-height: 12px;
+    }
+    .http-step:last-child .line { display: none; }
+    .http-step .content {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 10px;
+      background: #fff;
+      font-size: 10pt;
+    }
+    .http-step .content code { font-size: 9pt; }
+
+    .note {
+      border-left: 4px solid var(--accent);
+      background: #eff6ff;
+      padding: 10px 14px;
+      margin: 12px 0;
+      font-size: 10pt;
+    }
+    .warn {
+      border-left: 4px solid #d97706;
+      background: #fffbeb;
+      padding: 10px 14px;
+      margin: 12px 0;
+      font-size: 10pt;
+    }
+    .file-path { font-family: Consolas, monospace; font-size: 9pt; color: #334155; }
+    ul, ol { margin: 8px 0; padding-left: 22px; }
+    li { margin: 3px 0; }
+    @media print {
+      body { padding: 12mm; }
+      h2 { page-break-before: auto; }
+      a { color: inherit; text-decoration: none; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<h1>Wirtualny CFO – Dokumentacja techniczna</h1>
+<p class="meta">
+  Projekt: KSEF &nbsp;|&nbsp; Wersja dokumentu: <strong>2.0</strong> &nbsp;|&nbsp; Data: 2026-08-02<br />
+  Zakres: pełny stack — backend (FastAPI, PostgreSQL, ETL, AI, KSeF sync), frontend (Next.js dashboard), modele kosztów vs sprzedaży, przeglądanie faktur.<br />
+  Repozytorium: <span class="file-path">c:\Users\pawel.kosinski\source\repos\KSEF</span>
+</p>
+
+<div class="note no-print">
+  <strong>Eksport do PDF:</strong> Otwórz ten plik w przeglądarce → Drukuj (Ctrl+P) → „Zapisz jako PDF”.
+  W repozytorium dostępna jest też wersja <span class="file-path">docs/Wirtualny-CFO-Dokumentacja-Techniczna.pdf</span> (wygenerowana automatycznie).
+</div>
+
+<nav class="toc" id="spis">
+  <strong>Spis treści</strong>
+  <ol>
+    <li><a href="#s1">Cel systemu i architektura</a></li>
+    <li><a href="#s2">Struktura repozytorium</a></li>
+    <li><a href="#s3">Uruchomienie i konfiguracja</a></li>
+    <li><a href="#s4">Baza danych: modele, migracje, RLS</a></li>
+    <li><a href="#s5">Uwierzytelnianie i multi-tenancy</a></li>
+    <li><a href="#s6">Warstwa HTTP API</a></li>
+    <li><a href="#s7">Potok ETL (XML → AI → PostgreSQL)</a></li>
+    <li><a href="#s8">Parser FA(3) XML</a></li>
+    <li><a href="#s9">Moduł kategoryzacji AI (Ollama)</a></li>
+    <li><a href="#s10">Integracja KSeF API 2.0</a></li>
+    <li><a href="#s11">Analityka opisowa (StatisticsService)</a></li>
+    <li><a href="#s11b">Role faktur: koszty vs sprzedaż</a></li>
+    <li><a href="#s11c">API faktur (InvoiceService)</a></li>
+    <li><a href="#s12">Frontend — dashboard i przeglądanie faktur</a></li>
+    <li><a href="#s13">Skrypty deweloperskie</a></li>
+    <li><a href="#s14">Testy automatyczne</a></li>
+    <li><a href="#s15">Diagramy przepływu danych</a></li>
+    <li><a href="#s16">Mapowanie FA(3) → baza danych</a></li>
+    <li><a href="#s17">Luki implementacyjne i roadmap</a></li>
+  </ol>
+</nav>
+
+<!-- ==================== S1 ==================== -->
+<h2 id="s1">1. Cel systemu i architektura</h2>
+
+<p>
+  <strong>Wirtualny CFO</strong> to MVP platformy B2B dla polskich MŚP. System pobiera faktury
+  ze schematu <strong>FA(3)</strong> (Krajowy System e-Faktur) przez API KSeF 2.0, parsuje je,
+  kategoryzuje pozycje towarowe/usługowe za pomocą lokalnego modelu językowego (Ollama),
+  zapisuje wyniki w <strong>PostgreSQL</strong> z izolacją danych per firma (tenant), a następnie
+  udostępnia zagregowane statystyki i listę faktur przez REST API oraz dashboard Next.js.
+</p>
+<p>
+  <strong>Klucowa zasada biznesowa (od v2.0):</strong> faktury są rozróżniane jako
+  <em>kosztowe</em> (<code>invoice_role=cost</code>, KSeF Subject2 — firma jest nabywcą) lub
+  <em>sprzedaż</em> (<code>invoice_role=sales</code>, KSeF Subject1 — firma jest sprzedawcą).
+  Dashboard i statystyki filtrują dane według tej roli — faktury sprzedaży nie są traktowane jako wydatki.
+</p>
+
+<h3>1.1. Stos technologiczny (backend)</h3>
+<table>
+  <tr><th>Warstwa</th><th>Technologia</th><th>Plik konfiguracyjny</th></tr>
+  <tr><td>HTTP API</td><td>FastAPI 0.115+, Uvicorn</td><td class="file-path">backend/app/main.py</td></tr>
+  <tr><td>ORM / DB</td><td>SQLAlchemy 2.x async, asyncpg</td><td class="file-path">backend/app/database/</td></tr>
+  <tr><td>Migracje</td><td>Alembic</td><td class="file-path">backend/alembic/</td></tr>
+  <tr><td>Auth (dev)</td><td>JWT HS256 (python-jose)</td><td class="file-path">backend/app/dependencies/tenant.py</td></tr>
+  <tr><td>XML</td><td>lxml (parser obronny)</td><td class="file-path">backend/app/services/xml/fa3_parser.py</td></tr>
+  <tr><td>AI</td><td>Ollama AsyncClient, model qwen2.5:7b</td><td class="file-path">backend/app/services/ai/</td></tr>
+  <tr><td>KSeF</td><td>httpx async, RSA-OAEP SHA-256</td><td class="file-path">backend/app/services/ksef/</td></tr>
+  <tr><td>Frontend</td><td>Next.js 16, React, Recharts, Tailwind</td><td class="file-path">frontend/</td></tr>
+  <tr><td>Baza</td><td>PostgreSQL 16 (Docker)</td><td class="file-path">docker-compose.yml</td></tr>
+</table>
+
+<h3>1.2. Architektura warstwowa</h3>
+<div class="flow-stack">
+  <div class="flow-box flow-box--input">
+    <strong>1. Warstwa wejścia</strong>
+    <p>Sync KSeF na żądanie (POST /ksef/sync) &nbsp;·&nbsp; skrypty CLI (ETL testowy)</p>
+    <div class="flow-tags">
+      <span>POST /api/v1/ksef/sync</span>
+      <span>test_etl_pipeline.py</span>
+      <span>probe_ksef_invoices.py</span>
+    </div>
+  </div>
+  <div class="flow-arrow"><span class="arrow-icon">↓</span>bytes XML FA(3)</div>
+
+  <div class="flow-box flow-box--process">
+    <strong>2. Warstwa przetwarzania</strong>
+    <p>Katalog <code>backend/app/services/</code></p>
+    <div class="flow-tags">
+      <span>fa3_parser</span>
+      <span>→</span>
+      <span>etl_pipeline</span>
+      <span>→</span>
+      <span>ProductCategorizer (Ollama)</span>
+    </div>
+  </div>
+  <div class="flow-arrow"><span class="arrow-icon">↓</span>INSERT invoices + invoice_lines</div>
+
+  <div class="flow-box flow-box--data">
+    <strong>3. Warstwa danych</strong>
+    <p>PostgreSQL + Row-Level Security (<code>app.current_tenant</code>)</p>
+    <div class="flow-tags">
+      <span>tenants</span>
+      <span>tenant_categories</span>
+      <span>invoices</span>
+      <span>invoice_lines</span>
+    </div>
+  </div>
+  <div class="flow-arrow"><span class="arrow-icon">↓</span>SELECT + GROUP BY (StatisticsService)</div>
+
+  <div class="flow-box flow-box--api">
+    <strong>4. Warstwa API</strong>
+    <p>FastAPI + JWT Bearer</p>
+    <div class="flow-tags">
+      <span>GET /api/v1/stats/*</span>
+      <span>GET /api/v1/invoices</span>
+      <span>POST /api/v1/ksef/sync</span>
+      <span>GET /api/v1/me</span>
+    </div>
+  </div>
+  <div class="flow-arrow"><span class="arrow-icon">↓</span>JSON</div>
+
+  <div class="flow-box flow-box--consumer">
+    <strong>5. Konsument</strong>
+    <p>Frontend Next.js — zakładki Koszty/Sprzedaż, wykresy Recharts, lista i szczegóły faktur</p>
+  </div>
+</div>
+
+<p>
+  Kluczowa zasada projektu: <strong>do modelu AI trafia wyłącznie pole P_7 (nazwa towaru/usługi)</strong>.
+  NIP, kwoty, daty i metadane faktury nigdy nie są wysyłane do Ollamy — chroni to prywatność
+  i zapobiega „wyciekowi” danych finansowych do promptu.
+</p>
+
+<!-- ==================== S2 ==================== -->
+<h2 id="s2">2. Struktura repozytorium</h2>
+
+<pre>
+KSEF/
+├── docker-compose.yml              # PostgreSQL 16 (kontener vcfo-postgres)
+├── backend/
+│   ├── alembic.ini
+│   ├── requirements.txt
+│   ├── .env.example
+│   ├── alembic/
+│   │   ├── env.py                  # Runner migracji (async)
+│   │   └── versions/
+│   │       ├── 001_initial_schema_with_rls.py
+│   │       ├── 002_tenant_categories.py
+│   │       ├── 003_force_rls.py
+│   │       └── 004_invoice_role.py
+│   ├── app/
+│   │   ├── main.py                 # FastAPI app, CORS, endpointy główne
+│   │   ├── config.py               # pydantic-settings (.env + .env.example)
+│   │   ├── api/v1/
+│   │   │   ├── router.py           # stats + invoices + ksef
+│   │   │   └── endpoints/
+│   │   │       ├── stats.py
+│   │   │       ├── invoices.py
+│   │   │       └── ksef.py
+│   │   ├── database/
+│   │   │   ├── models.py           # SQLAlchemy ORM (+ invoice_role)
+│   │   │   └── session.py        # Engine, sesje, set_tenant_context
+│   │   ├── dependencies/tenant.py  # JWT, TenantContext, get_rls_session
+│   │   ├── middleware/tenant_rls.py
+│   │   ├── schemas/                # stats, invoices, ksef
+│   │   └── services/
+│   │       ├── etl_pipeline.py
+│   │       ├── invoices.py         # lista i szczegóły faktur
+│   │       ├── invoice_roles.py    # Subject1/2 → cost/sales
+│   │       ├── tenant_categories.py
+│   │       ├── ai/                 # categorizer, schemas, exceptions
+│   │       ├── analytics/statistics.py
+│   │       ├── ksef/               # client, auth, sync_service, crypto
+│   │       └── xml/                # fa3_parser, models
+│   ├── scripts/                    # create_dev_token, ETL, probe_ksef, …
+│   └── tests/                      # pytest (8+ modułów + fixture XML)
+└── frontend/
+    ├── app/
+    │   ├── page.tsx                # DashboardView
+    │   └── invoices/[id]/page.tsx  # Szczegóły faktury
+    ├── components/                 # wykresy, InvoiceList, RoleTabs, …
+    └── lib/                        # api.ts, types.ts (ROLE_LABELS)
+</pre>
+
+<!-- ==================== S3 ==================== -->
+<h2 id="s3">3. Uruchomienie i konfiguracja</h2>
+
+<h3>3.1. Kolejność uruchomienia pełnego stacku</h3>
+<ol>
+  <li><code>docker compose up -d</code> — PostgreSQL na porcie 5432</li>
+  <li><code>cd backend &amp;&amp; .venv\Scripts\alembic upgrade head</code> — migracje</li>
+  <li>Ollama z modelem <code>qwen2.5:7b</code> na <code>http://localhost:11434</code></li>
+  <li><code>.venv\Scripts\uvicorn app.main:app --reload --port 8000</code></li>
+  <li><code>.venv\Scripts\python scripts\test_etl_pipeline.py</code> — załadowanie danych testowych</li>
+  <li><code>.venv\Scripts\python scripts\create_dev_token.py --nip 9998887776</code> — token JWT</li>
+  <li>Frontend: <code>NEXT_PUBLIC_DEV_TOKEN</code> w <code>.env.local</code>, <code>npm run dev</code></li>
+</ol>
+
+<div class="warn">
+  <strong>Ważne (Windows):</strong> Zawsze używaj <code>backend\.venv\Scripts\python.exe</code>, nie systemowego
+  <code>python</code>. Systemowy interpreter nie ma zainstalowanych zależności (sqlalchemy, fastapi itd.).
+</div>
+
+<h3>3.2. Zmienne środowiskowe (<span class="file-path">backend/.env</span>)</h3>
+<table>
+  <tr><th>Zmienna</th><th>Domyślnie</th><th>Opis</th></tr>
+  <tr><td><code>DATABASE_URL</code></td><td>postgresql+asyncpg://vcfo:vcfo_secret@localhost:5432/wirtualny_cfo</td><td>Connection string async</td></tr>
+  <tr><td><code>JWT_SECRET_KEY</code></td><td>change-me-in-production</td><td>Klucz HS256 — musi być zgodny z tokenem frontendu</td></tr>
+  <tr><td><code>JWT_ALGORITHM</code></td><td>HS256</td><td>Algorytm JWT</td></tr>
+  <tr><td><code>DEBUG</code></td><td>false</td><td>true → echo SQL w logach</td></tr>
+  <tr><td><code>KSEF_BASE_URL</code></td><td>https://api-test.ksef.mf.gov.pl/api/v2</td><td>Środowisko testowe KSeF</td></tr>
+  <tr><td><code>KSEF_NIP</code></td><td>(puste)</td><td>NIP kontekstu uwierzytelniania KSeF</td></tr>
+  <tr><td><code>KSEF_TOKEN</code></td><td>(puste)</td><td>Token systemowy KSeF</td></tr>
+  <tr><td><code>KSEF_AUTH_POLL_INTERVAL_SEC</code></td><td>1.0</td><td>Interwał pollingu statusu auth</td></tr>
+  <tr><td><code>KSEF_AUTH_POLL_MAX_ATTEMPTS</code></td><td>60</td><td>Max prób (timeout ~60 s)</td></tr>
+  <tr><td><code>OLLAMA_HOST</code></td><td>http://localhost:11434</td><td>Adres serwera Ollama</td></tr>
+  <tr><td><code>OLLAMA_MODEL</code></td><td>qwen2.5:7b</td><td>Model SLM do kategoryzacji</td></tr>
+</table>
+
+<p>
+  Konfiguracja jest singletonem: <code>get_settings()</code> w <span class="file-path">app/config.py</span>
+  z dekoratorem <code>@lru_cache</code>. Wczytuje pliki <code>.env</code> i <code>.env.example</code>
+  (kolejność w <code>SettingsConfigDict</code>) — w dev można trzymać sekrety w <code>.env.example</code>,
+  ale w produkcji używaj wyłącznie <code>.env</code> poza repozytorium.
+</p>
+
+<!-- ==================== S4 ==================== -->
+<h2 id="s4">4. Baza danych: modele, migracje, RLS</h2>
+
+<h3>4.1. Model danych (ER)</h3>
+<div class="er-diagram">
+  <div class="er-entity">
+    tenants
+    <span class="badge-no-rls">bez RLS</span>
+    <em>Rejestr firm (dzierżawców SaaS)</em>
+  </div>
+
+  <div class="er-tree">
+    <div class="er-row">
+      <div class="er-label">1:N</div>
+      <div class="er-card">
+        <div class="er-entity er-entity--child">
+          tenant_categories
+          <span class="badge-rls">RLS</span>
+          <em>tenant_id = app.current_tenant</em>
+        </div>
+        <p style="font-size:9.5pt;color:var(--muted);margin:8px 0 0;">Słownik kategorii kosztowych per firma (dla AI)</p>
+      </div>
+    </div>
+
+    <div class="er-row">
+      <div class="er-label">1:N</div>
+      <div class="er-card">
+        <div class="er-entity er-entity--child">
+          invoices
+          <span class="badge-rls">RLS</span>
+          <em>tenant_id = app.current_tenant</em>
+        </div>
+        <p style="font-size:9.5pt;color:var(--muted);margin:8px 0 0;">Nagłówek faktury FA(3): P_1, P_2, NIP sprzedawcy/nabywcy</p>
+
+        <div class="er-nested">
+          <div class="er-row" style="margin-bottom:0;">
+            <div class="er-label">1:N</div>
+            <div class="er-card">
+              <div class="er-entity er-entity--child">
+                invoice_lines
+                <span class="badge-rls">RLS</span>
+                <em>tenant_id = app.current_tenant</em>
+              </div>
+              <p style="font-size:9.5pt;color:var(--muted);margin:8px 0 0;">Wiersze FaWiersz: P_7…P_11 + pola AI (kategoria, pewność)</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>4.2. Tabele — szczegóły kolumn</h3>
+
+<h4>tenants</h4>
+<table>
+  <tr><th>Kolumna</th><th>Typ</th><th>Opis</th></tr>
+  <tr><td>id</td><td>UUID PK</td><td>Identyfikator dzierżawcy (firma MŚP)</td></tr>
+  <tr><td>name</td><td>VARCHAR(255)</td><td>Nazwa firmy</td></tr>
+  <tr><td>nip</td><td>VARCHAR(10) UNIQUE</td><td>NIP — klucz biznesowy</td></tr>
+  <tr><td>ksef_hwm_date</td><td>TIMESTAMPTZ NULL</td><td>High Water Mark — ostatnia data synchronizacji KSeF</td></tr>
+  <tr><td>created_at</td><td>TIMESTAMPTZ</td><td>Data utworzenia rekordu</td></tr>
+</table>
+
+<h4>tenant_categories</h4>
+<table>
+  <tr><th>Kolumna</th><th>Typ</th><th>Opis</th></tr>
+  <tr><td>id</td><td>UUID PK</td><td></td></tr>
+  <tr><td>tenant_id</td><td>UUID FK → tenants</td><td>Właściciel kategorii</td></tr>
+  <tr><td>name</td><td>VARCHAR(128)</td><td>Nazwa kategorii kosztowej (słownik AI)</td></tr>
+  <tr><td>sort_order</td><td>INTEGER</td><td>Kolejność wyświetlania / promptu</td></tr>
+  <tr><td>is_active</td><td>BOOLEAN</td><td>Czy kategoria jest aktywna</td></tr>
+</table>
+<p>Indeks unikalny: <code>(tenant_id, name)</code></p>
+
+<h4>invoices</h4>
+<table>
+  <tr><th>Kolumna</th><th>Źródło FA(3)</th><th>Opis</th></tr>
+  <tr><td>invoice_number</td><td>P_2</td><td>Numer faktury</td></tr>
+  <tr><td>issue_date</td><td>P_1</td><td>Data wystawienia</td></tr>
+  <tr><td>sale_date</td><td>P_6</td><td>Data sprzedaży (opcjonalna)</td></tr>
+  <tr><td>seller_nip</td><td>Podmiot1/NIP</td><td>NIP sprzedawcy</td></tr>
+  <tr><td>buyer_nip</td><td>Podmiot2/NIP</td><td>NIP nabywcy</td></tr>
+  <tr><td>ksef_number</td><td>KSeF</td><td>Numer KSeF (unikalny, opcjonalny w teście)</td></tr>
+  <tr><td>invoice_role</td><td>sync KSeF</td><td><code>cost</code> (Subject2, nabywca) lub <code>sales</code> (Subject1, sprzedawca)</td></tr>
+  <tr><td>currency_code</td><td>—</td><td>Domyślnie PLN</td></tr>
+</table>
+
+<h4>invoice_lines</h4>
+<table>
+  <tr><th>Kolumna</th><th>Źródło FA(3)</th><th>Opis</th></tr>
+  <tr><td>line_number</td><td>kolejność FaWiersz</td><td>Numer wiersza (1-based)</td></tr>
+  <tr><td>product_name</td><td>P_7</td><td>Nazwa towaru/usługi — <strong>jedyne pole wysyłane do AI</strong></td></tr>
+  <tr><td>quantity</td><td>P_8B</td><td>Ilość (NUMERIC 18,4)</td></tr>
+  <tr><td>unit_price</td><td>P_9A</td><td>Cena jednostkowa netto</td></tr>
+  <tr><td>line_net_value</td><td>P_11</td><td>Wartość netto wiersza — podstawa agregacji statystyk</td></tr>
+  <tr><td>ai_category_main</td><td>AI</td><td>Główna kategoria z drzewa tenanta</td></tr>
+  <tr><td>ai_category_sub</td><td>AI</td><td>Podkategoria (max 3 słowa)</td></tr>
+  <tr><td>ai_confidence</td><td>AI</td><td>Pewność 0–100</td></tr>
+</table>
+
+<h3>4.3. Row-Level Security (RLS)</h3>
+
+<p>
+  Izolacja multi-tenant jest wymuszana na poziomie PostgreSQL, nie tylko w kodzie aplikacji.
+  Mechanizm opiera się na zmiennej sesyjnej <code>app.current_tenant</code>.
+</p>
+
+<pre>
+-- Ustawienie kontekstu (app/database/session.py → set_tenant_context):
+SELECT set_config('app.current_tenant', '&lt;uuid-tenanta&gt;', true);
+-- trzeci argument true = SET LOCAL (reset po COMMIT/ROLLBACK)
+
+-- Polityka RLS (migracja 001, tabele invoices, invoice_lines, tenant_categories):
+CREATE POLICY tenant_isolation_policy ON &lt;table&gt;
+FOR ALL
+USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::UUID)
+WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::UUID);
+</pre>
+
+<p><strong>Migracja 003 (FORCE RLS):</strong> Właściciel tabeli (użytkownik aplikacji) nie może omijać RLS.
+Bez tego PostgreSQL domyślnie pozwala ownerowi widzieć wszystkie wiersze.</p>
+
+<p><strong>Dwutorowe zabezpieczenie w analityce:</strong> <code>StatisticsService</code> dodatkowo filtruje
+<code>WHERE InvoiceLine.tenant_id = self._tenant_id</code> — jawny filtr w SQL jako defense-in-depth.</p>
+
+<h3>4.4. Historia migracji Alembic</h3>
+<table>
+  <tr><th>Rewizja</th><th>Plik</th><th>Zmiany</th></tr>
+  <tr><td>001_initial</td><td>001_initial_schema_with_rls.py</td><td>tenants, invoices, invoice_lines + ENABLE RLS + polityki</td></tr>
+  <tr><td>002_tenant_categories</td><td>002_tenant_categories.py</td><td>Tabela tenant_categories + RLS + seed domyślnych nazw</td></tr>
+  <tr><td>003_force_rls</td><td>003_force_rls.py</td><td>FORCE ROW LEVEL SECURITY na 3 tabelach tenant-scoped</td></tr>
+  <tr><td>004_invoice_role</td><td>004_invoice_role.py</td><td>Kolumna <code>invoices.invoice_role</code> + backfill sales gdy seller_nip = tenant.nip</td></tr>
+</table>
+
+<!-- ==================== S5 ==================== -->
+<h2 id="s5">5. Uwierzytelnianie i multi-tenancy</h2>
+
+<h3>5.1. Model JWT (tryb deweloperski)</h3>
+<p>
+  W MVP nie ma pełnego logowania użytkownika. Token JWT jest generowany skryptem
+  <span class="file-path">scripts/create_dev_token.py</span> i zawiera:
+</p>
+<pre>
+{
+  "sub": "dev-user",
+  "tenant_id": "&lt;UUID tenanta z bazy&gt;",
+  "exp": &lt;timestamp UTC + 24h&gt;
+}
+</pre>
+
+<h3>5.2. Przepływ autoryzacji w żądaniu HTTP</h3>
+<ol>
+  <li>Klient wysyła nagłówek <code>Authorization: Bearer &lt;token&gt;</code></li>
+  <li><code>get_current_tenant</code> (<span class="file-path">dependencies/tenant.py</span>) dekoduje JWT kluczem <code>JWT_SECRET_KEY</code></li>
+  <li>Wyciąga <code>tenant_id</code> → tworzy obiekt <code>TenantContext</code></li>
+  <li><code>get_rls_session</code> otwiera transakcję async, wywołuje <code>set_tenant_context</code>, yielduje sesję SQLAlchemy</li>
+  <li>Po zakończeniu handlera: COMMIT (lub ROLLBACK przy błędzie)</li>
+</ol>
+
+<h3>5.3. Middleware TenantRLSMiddleware</h3>
+<p>
+  Plik <span class="file-path">middleware/tenant_rls.py</span> — opcjonalnie parsuje JWT i ustawia
+  <code>request.state.tenant_id</code>. <strong>Główna ścieżka RLS to dependency injection</strong>
+  (<code>get_rls_session</code>), nie middleware. Middleware jest pomocniczy i nie blokuje żądań
+  przy nieprawidłowym tokenie.
+</p>
+
+<!-- ==================== S6 ==================== -->
+<h2 id="s6">6. Warstwa HTTP API</h2>
+
+<h3>6.1. Rejestracja routerów</h3>
+<pre>
+app/main.py
+  └── include_router(api_router)          # prefix /api/v1
+        ├── stats.router                    # prefix /stats
+        ├── invoices.router                 # prefix /invoices
+        └── ksef.router                     # prefix /ksef
+</pre>
+
+<h3>6.2. Pełna lista endpointów</h3>
+<table>
+  <tr><th>Metoda</th><th>Ścieżka</th><th>Auth</th><th>Opis</th></tr>
+  <tr><td>GET</td><td>/health</td><td>Nie</td><td>Health check aplikacji</td></tr>
+  <tr><td>GET</td><td>/api/v1/me</td><td>JWT</td><td><code>tenant_id</code>, <code>sub</code> z tokena</td></tr>
+  <tr><td>GET</td><td>/api/v1/invoice-lines</td><td>JWT+RLS</td><td>Lista wierszy (max 100) — legacy</td></tr>
+  <tr><td>GET</td><td>/api/v1/invoices</td><td>JWT+RLS</td><td>Lista faktur; query: <code>role</code>, <code>limit</code></td></tr>
+  <tr><td>GET</td><td>/api/v1/invoices/{id}</td><td>JWT+RLS</td><td>Szczegóły faktury + wszystkie pozycje</td></tr>
+  <tr><td>GET</td><td>/api/v1/stats/cost-structure</td><td>JWT+RLS</td><td>Struktura wg kategorii AI (cost) lub pozycji (sales)</td></tr>
+  <tr><td>GET</td><td>/api/v1/stats/trend</td><td>JWT+RLS</td><td>Trend miesięczny netto</td></tr>
+  <tr><td>GET</td><td>/api/v1/stats/top-counterparties</td><td>JWT+RLS</td><td>Top dostawcy (cost) lub klienci (sales)</td></tr>
+  <tr><td>GET</td><td>/api/v1/stats/top-vendors</td><td>JWT+RLS</td><td>Alias wsteczny — tylko koszty (seller_nip)</td></tr>
+  <tr><td>POST</td><td>/api/v1/ksef/sync</td><td>JWT+RLS</td><td>Sync paczki z KSeF → ETL</td></tr>
+</table>
+
+<h3>6.3. POST /api/v1/ksef/sync — body JSON</h3>
+<table>
+  <tr><th>Pole</th><th>Typ</th><th>Domyślnie</th><th>Opis</th></tr>
+  <tr><td>date_from</td><td>date</td><td>—</td><td>Początek zakresu (data wystawienia P_1)</td></tr>
+  <tr><td>date_to</td><td>date</td><td>—</td><td>Koniec zakresu (max 90 dni od date_from)</td></tr>
+  <tr><td>subject_type</td><td>string</td><td>Subject2</td><td><code>Subject1</code> = sprzedaż, <code>Subject2</code> = koszty</td></tr>
+</table>
+<p>Walidacja: tenant musi mieć aktywne <code>tenant_categories</code>, inaczej HTTP 400. Błędy KSeF → HTTP 502.</p>
+
+<h3>6.4. Parametry query (stats i invoices)</h3>
+<table>
+  <tr><th>Parametr</th><th>Endpointy</th><th>Opis</th></tr>
+  <tr><td>role</td><td>stats/*, /invoices</td><td><code>cost</code> lub <code>sales</code> — filtr <code>invoice_role</code></td></tr>
+  <tr><td>date_from, date_to</td><td>stats/*</td><td>Filtr <code>Invoice.issue_date</code></td></tr>
+  <tr><td>limit</td><td>top-counterparties, /invoices</td><td>1–10 (counterparties) lub 1–100 (invoices)</td></tr>
+</table>
+
+<h3>6.5. CORS</h3>
+<p>
+  W <span class="file-path">main.py</span> dozwolone originy dev-serwera Next.js:
+  <code>http://localhost:3000</code>, <code>http://127.0.0.1:3000</code>,
+  <code>http://localhost:3001</code>, <code>http://127.0.0.1:3001</code>.
+  Bez poprawnego CORS przeglądarka zwraca „Failed to fetch” na OPTIONS preflight.
+</p>
+
+<div class="note">
+  <strong>Niezaimplementowane w API:</strong> CRUD kategorii tenanta przez REST, upload XML spoza KSeF, worker HWM w tle.
+</div>
+
+<!-- ==================== S7 ==================== -->
+<h2 id="s7">7. Potok ETL (XML → AI → PostgreSQL)</h2>
+
+<p>
+  Centralna klasa: <code>InvoiceEtlPipeline</code> w <span class="file-path">app/services/etl_pipeline.py</span>.
+  Orkiestruje cały przepływ przetwarzania pojedynczej faktury FA(3).
+</p>
+
+<h3>7.1. Diagram sekwencji ETL</h3>
+<div class="seq-flow">
+  <div class="seq-start">Wywołujący: skrypt CLI lub (przyszły) endpoint API</div>
+
+  <div class="seq-step">
+    <span class="seq-num">0</span>
+    <div class="seq-body">
+      <strong>process_invoice_xml(tenant_id, xml_bytes, ksef_number?, invoice_role?, session?)</strong>
+      <ul>
+        <li><code>invoice_role</code>: <code>cost</code> lub <code>sales</code> — zapisane w <code>invoices.invoice_role</code></li>
+        <li>Jeśli <code>session</code> podany — używa zewnętrznej transakcji</li>
+        <li>Jeśli <code>session=None</code> — otwiera własną sesję + <code>set_tenant_context</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="seq-step">
+    <span class="seq-num">1</span>
+    <div class="seq-body">
+      <strong>parse_fa3_xml(xml_content)</strong>
+      <ul>
+        <li>Bezpieczny parser lxml (ochrona XXE)</li>
+        <li>Wynik: <code>Fa3ParseResult { header, lines[] }</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="seq-step">
+    <span class="seq-num">2</span>
+    <div class="seq-body">
+      <strong>resolve_tenant_categories(session, tenant_id)</strong>
+      <ul>
+        <li><code>SELECT</code> z <code>tenant_categories</code> WHERE <code>is_active</code></li>
+        <li>Fallback: <code>DEFAULT_TENANT_CATEGORIES</code> (6 kategorii MVP)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="seq-step">
+    <span class="seq-num">3</span>
+    <div class="seq-body">
+      <strong>INSERT Invoice</strong>
+      <ul>
+        <li>Nagłówek z <code>parsed.header</code> (P_1, P_2, NIP-y…)</li>
+        <li><code>session.flush()</code> → uzyskanie <code>invoice.id</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="seq-step">
+    <span class="seq-num">4</span>
+    <div class="seq-body">
+      <strong>FOR EACH line IN parsed.lines</strong>
+      <div class="seq-sub">
+        <strong>4a.</strong> <code>categorizer.classify_product_name(line.product_name, allowed_categories)</code><br />
+        → do Ollamy trafia <strong>wyłącznie P_7</strong> (nazwa towaru/usługi)
+      </div>
+      <div class="seq-sub" style="border-color:#c4b5fd;margin-top:6px;">
+        <strong>4b.</strong> <code>INSERT InvoiceLine</code> — P_7, P_8B, P_9A, P_11 + <code>ai_category_*</code>
+      </div>
+    </div>
+  </div>
+
+  <div class="seq-step">
+    <span class="seq-num">5</span>
+    <div class="seq-body">
+      <strong>session.flush() → EtlProcessResult</strong>
+      <ul>
+        <li>Zwraca: <code>tenant_id</code>, <code>invoice_id</code>, <code>lines_processed</code>, <code>categories_used</code></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<h3>7.2. Zarządzanie transakcją</h3>
+<ul>
+  <li>Gdy <code>session=None</code>: pipeline sam otwiera sesję, <code>begin()</code>, <code>set_tenant_context</code>, <code>commit()</code> lub <code>rollback()</code></li>
+  <li>Gdy <code>session</code> przekazany (jak w <code>test_etl_pipeline.py</code>): pipeline używa zewnętrznej transakcji — caller robi <code>commit()</code></li>
+</ul>
+
+<h3>7.3. Wynik EtlProcessResult</h3>
+<table>
+  <tr><th>Pole</th><th>Typ</th><th>Znaczenie</th></tr>
+  <tr><td>tenant_id</td><td>UUID</td><td>Tenant, dla którego zapisano fakturę</td></tr>
+  <tr><td>invoice_id</td><td>UUID</td><td>ID nowego rekordu invoices</td></tr>
+  <tr><td>lines_processed</td><td>int</td><td>Liczba przetworzonych wierszy FaWiersz</td></tr>
+  <tr><td>categories_used</td><td>list[str]</td><td>Lista kategorii użytych w prompcie AI</td></tr>
+</table>
+
+<h3>7.4. Przykład end-to-end (fixture testowy)</h3>
+<p>Plik: <span class="file-path">backend/tests/fixtures/sample_fa3_invoice.xml</span></p>
+<table>
+  <tr><th>Wiersz</th><th>P_7</th><th>P_11</th><th>Typowa kategoria AI</th></tr>
+  <tr><td>1</td><td>Elektrody spawalnicze 3.2mm</td><td>255.00</td><td>Materiały i Surowce</td></tr>
+  <tr><td>2</td><td>Olej napędowy ON</td><td>245.00</td><td>Paliwa i Transport</td></tr>
+</table>
+<p>Nagłówek: data P_1 = 2026-01-15, sprzedawca NIP 5265877635. Suma netto = 500.00 PLN.</p>
+
+<h3>7.5. Skrypt test_etl_pipeline.py — krok po kroku</h3>
+<ol>
+  <li><code>ensure_test_tenant()</code> — szuka NIP <code>9998887776</code>, tworzy tenant + 6 kategorii jeśli brak</li>
+  <li><code>set_tenant_context(session, tenant_id)</code> — aktywuje RLS</li>
+  <li><code>pipeline.process_invoice_xml(...)</code> — pełny ETL na fixture XML</li>
+  <li><code>session.commit()</code> — trwały zapis</li>
+  <li>Ponowne odczytanie <code>InvoiceLine</code> i wypisanie klasyfikacji AI w konsoli</li>
+  <li>Podpowiedź: <code>create_dev_token.py --nip 9998887776</code></li>
+</ol>
+
+<!-- ==================== S8 ==================== -->
+<h2 id="s8">8. Parser FA(3) XML</h2>
+
+<p>Plik: <span class="file-path">app/services/xml/fa3_parser.py</span></p>
+
+<h3>8.1. Bezpieczeństwo parsowania</h3>
+<pre>
+etree.XMLParser(
+    resolve_entities=False,   # ochrona przed XXE
+    no_network=True,          # brak dostępu sieciowego z parsera
+    dtd_validation=False,
+    load_dtd=False,
+    huge_tree=False,          # ochrona przed Billion Laughs
+)
+</pre>
+
+<h3>8.2. Namespace i XPath</h3>
+<ul>
+  <li>Domyślny namespace FA(3): <code>http://crd.gov.pl/wzor/2025/06/25/13775/</code></li>
+  <li>Wykrywanie dynamiczne z atrybutu <code>xmlns</code> korzenia dokumentu</li>
+  <li>Wiersze: XPath <code>//tns:Fa/tns:FaWiersz</code> + fallback bez namespace</li>
+  <li>Nagłówek: P_1, P_2, P_6 z sekcji Fa; NIP z Podmiot1/Podmiot2</li>
+</ul>
+
+<h3>8.3. Modele wynikowe (<span class="file-path">xml/models.py</span>)</h3>
+<table>
+  <tr><th>Model</th><th>Pola</th></tr>
+  <tr><td>Fa3InvoiceHeader</td><td>invoice_number, issue_date, sale_date, seller_nip, buyer_nip, currency_code</td></tr>
+  <tr><td>Fa3InvoiceLine</td><td>line_number, product_name, quantity, unit_price, line_net_value</td></tr>
+  <tr><td>Fa3ParseResult</td><td>namespace, header, lines: list[Fa3InvoiceLine]</td></tr>
+</table>
+
+<h3>8.4. Wyjątki</h3>
+<p><code>Fa3XmlParserError</code> — nieprawidłowy XML, brak wierszy, brak P_7, błędne Decimal/date.
+Opakowywany przez ETL jako <code>EtlPipelineError</code>.</p>
+
+<!-- ==================== S9 ==================== -->
+<h2 id="s9">9. Moduł kategoryzacji AI (Ollama)</h2>
+
+<h3>9.1. Klasa ProductCategorizer</h3>
+<p>Plik: <span class="file-path">app/services/ai/categorizer.py</span></p>
+
+<h4>Przepływ classify_product_name(product_name, allowed_categories)</h4>
+<ol>
+  <li><code>validate_allowed_categories()</code> — lista niepusta, bez duplikatów</li>
+  <li><code>_assert_product_name_isolation(product_name)</code> — walidacja P_7:
+    <ul>
+      <li>niepuste, max 512 znaków</li>
+      <li>brak NIP (regex 10 cyfr)</li>
+      <li>brak kwot pieniężnych (wzorzec z 2 miejscami po przecinku lub separatorem tysięcy)</li>
+      <li>brak adresu e-mail</li>
+    </ul>
+  </li>
+  <li><code>build_category_schema(categories)</code> — dynamiczny Pydantic z <code>Literal[kat1, kat2, ...]</code></li>
+  <li><code>build_category_json_schema()</code> — JSON Schema dla parametru <code>format</code> Ollama</li>
+  <li><code>build_system_prompt(categories)</code> — prompt systemowy z listą dozwolonych kategorii</li>
+  <li>Wywołanie <code>AsyncClient.chat()</code>:
+    <ul>
+      <li>model: <code>OLLAMA_MODEL</code> (domyślnie qwen2.5:7b)</li>
+      <li>temperature: 0.0</li>
+      <li>num_predict: 128</li>
+      <li>format: JSON Schema (structured output)</li>
+    </ul>
+  </li>
+  <li><code>_sanitize_model_payload()</code> — czyszczenie artefaktów JSON z odpowiedzi SLM</li>
+  <li><code>schema_cls.model_validate(payload)</code> — walidacja Pydantic</li>
+</ol>
+
+<h3>9.2. Domyślne kategorie (<span class="file-path">ai/schemas.py</span>)</h3>
+<ol>
+  <li>Materiały i Surowce</li>
+  <li>Opakowania</li>
+  <li>Paliwa i Transport</li>
+  <li>Koszty Biurowe i IT</li>
+  <li>Usługi Zewnętrzne</li>
+  <li>Inne Koszty Operacyjne</li>
+</ol>
+
+<h3>9.3. Schemat odpowiedzi AI</h3>
+<pre>
+{
+  "kategoria_glowna": "&lt;Literal z listy tenanta&gt;",
+  "kategoria_podrzedna": "&lt;max 3 słowa po polsku&gt;",
+  "pewnosc_klasyfikacji": 0-100
+}
+</pre>
+
+<h3>9.4. Wyjątki</h3>
+<table>
+  <tr><th>Klasa</th><th>Przyczyna</th></tr>
+  <tr><td>AIInputIsolationError</td><td>Naruszenie reguł izolacji P_7</td></tr>
+  <tr><td>AICategorizationError</td><td>Błąd Ollama, nieprawidłowy JSON, walidacja Pydantic</td></tr>
+</table>
+
+<!-- ==================== S10 ==================== -->
+<h2 id="s10">10. Integracja KSeF API 2.0</h2>
+
+<div class="note">
+  Moduł KSeF obejmuje <strong>uwierzytelnianie</strong> oraz <strong>synchronizację na żądanie</strong>
+  (<code>POST /api/v1/ksef/sync</code>). Mechanizm HWM i worker w tle są odłożone — użytkownik ręcznie wybiera zakres dat.
+</div>
+
+<h3>10.1. Komponenty</h3>
+<table>
+  <tr><th>Plik</th><th>Klasa / funkcja</th><th>Rola</th></tr>
+  <tr><td>ksef/client.py</td><td>KsefClient</td><td>auth + POST/GET /invoices/exports + pobieranie części paczki</td></tr>
+  <tr><td>ksef/auth.py</td><td>KsefAuthService</td><td>Orkiestracja pełnego flow auth</td></tr>
+  <tr><td>ksef/sync_service.py</td><td>KsefSyncService</td><td>Auth → eksport → polling → deszyfracja → ETL</td></tr>
+  <tr><td>ksef/crypto.py</td><td>build_export_encryption_material, decrypt_aes256_cbc_pkcs7</td><td>RSA-OAEP + AES-256-CBC PKCS#7</td></tr>
+  <tr><td>api/v1/endpoints/ksef.py</td><td>POST /ksef/sync</td><td>Endpoint HTTP z walidacją kategorii i zakresu dat</td></tr>
+</table>
+
+<h3>10.2. Sekwencja uwierzytelniania tokenem KSeF</h3>
+<div class="steps-list">
+  <div class="step-card">
+    <div class="step-content">
+      <div class="method">POST /auth/challenge</div>
+      <div class="detail">Pobranie jednorazowego challenge i znacznika czasu</div>
+      <div class="result">→ <code>challenge</code>, <code>timestampMs</code></div>
+    </div>
+  </div>
+  <div class="step-card">
+    <div class="step-content">
+      <div class="method">GET /security/public-key-certificates</div>
+      <div class="detail">Pobranie certyfikatów publicznych MF do szyfrowania tokena</div>
+      <div class="result">→ wybór certyfikatu (<code>public_key_id</code>)</div>
+    </div>
+  </div>
+  <div class="step-card">
+    <div class="step-content">
+      <div class="method">RSA-OAEP SHA-256</div>
+      <div class="detail">Szyfrowanie ciągu: <code>ksef_token + "|" + timestampMs</code></div>
+      <div class="result">→ <code>encrypted_token</code> (base64), <code>public_key_id</code></div>
+    </div>
+  </div>
+  <div class="step-card">
+    <div class="step-content">
+      <div class="method">POST /auth/ksef-token</div>
+      <div class="detail">Body: <code>challenge</code>, <code>contextIdentifier: {type:"Nip", value: NIP}</code>, <code>encrypted_token</code>, <code>public_key_id</code></div>
+      <div class="result">→ <code>reference_number</code>, <code>authentication_token</code></div>
+    </div>
+  </div>
+  <div class="step-card">
+    <div class="step-content">
+      <div class="method">POLL GET /auth/{referenceNumber}</div>
+      <div class="detail">Nagłówek: <code>Authorization: Bearer &lt;authentication_token&gt;</code></div>
+      <div class="result">→ kod <strong>100</strong> = w toku &nbsp;|&nbsp; kod <strong>200</strong> = sukces &nbsp;|&nbsp; max 60 prób × 1 s</div>
+    </div>
+  </div>
+  <div class="step-card">
+    <div class="step-content">
+      <div class="method">POST /auth/token/redeem</div>
+      <div class="detail">Nagłówek: <code>Authorization: Bearer &lt;authentication_token&gt;</code> (jednorazowo)</div>
+      <div class="result">→ <code>access_token</code>, <code>refresh_token</code> (+ <code>valid_until</code>)</div>
+    </div>
+  </div>
+</div>
+
+<p>
+  <strong>Uwaga implementacyjna:</strong> NIP kontekstu biznesowego idzie do
+  <code>contextIdentifier</code> w <code>/auth/ksef-token</code>, nie do <code>/auth/challenge</code>.
+</p>
+
+<p>Test auth: <span class="file-path">scripts/test_ksef_auth.py</span> — wymaga <code>KSEF_TOKEN</code> w .env (NIP z rekordu tenanta w bazie).</p>
+
+<h3>10.3. Synchronizacja na żądanie (POST /api/v1/ksef/sync)</h3>
+<div class="seq-flow">
+  <div class="seq-start">POST /api/v1/ksef/sync { date_from, date_to } + JWT</div>
+  <div class="seq-step"><span class="seq-num">1</span><div class="seq-body"><strong>Walidacja</strong><ul><li>Aktywne tenant_categories (HTTP 400 jeśli brak)</li><li>Zakres ≤ 90 dni</li></ul></div></div>
+  <div class="seq-step"><span class="seq-num">2</span><div class="seq-body"><strong>KsefAuthService</strong> — JWT access token (NIP tenanta z bazy)</div></div>
+  <div class="seq-step"><span class="seq-num">3</span><div class="seq-body"><strong>POST /invoices/exports</strong><ul><li><code>subjectType</code>: Subject1 lub Subject2 (parametr sync)</li><li><code>dateType</code>: Issue</li><li>encryption: klucz 32B + IV 16B (RSA SymmetricKeyEncryption)</li></ul></div></div>
+  <div class="seq-step"><span class="seq-num">4</span><div class="seq-body"><strong>POLL GET /invoices/exports/{ref}</strong> — kod 100 → czekaj, kod 200 → paczka gotowa</div></div>
+  <div class="seq-step"><span class="seq-num">5</span><div class="seq-body"><strong>Pobranie parts[].url</strong> — bez Bearer; deszyfracja AES-256-CBC; rozpakowanie ZIP</div></div>
+  <div class="seq-step"><span class="seq-num">6</span><div class="seq-body"><strong>InvoiceEtlPipeline</strong> — każdy <code>{ksefNumber}.xml</code> z <code>invoice_role</code> z mapowania Subject→role</div></div>
+</div>
+
+<h3>10.4. Subject1 vs Subject2 — mechanizm biznesowy</h3>
+<table>
+  <tr><th>KSeF subjectType</th><th>invoice_role</th><th>Rola tenanta na fakturze</th><th>Przykład</th></tr>
+  <tr><td>Subject2</td><td><code>cost</code></td><td>Nabywca (koszt)</td><td>Faktura od dostawcy — firma kupiła materiały</td></tr>
+  <tr><td>Subject1</td><td><code>sales</code></td><td>Sprzedawca (przychód)</td><td>Firma wystawiła fakturę do klienta</td></tr>
+</table>
+<p>
+  Mapowanie w <span class="file-path">app/services/invoice_roles.py</span> (<code>ksef_subject_to_role</code>).
+  Sync z domyślnym Subject2 nie pobierze faktur wystawionych przez tenant — wymaga
+  <code>subject_type: "Subject1"</code> w body sync. Diagnostika: <span class="file-path">scripts/probe_ksef_invoices.py</span>.
+</p>
+
+<!-- ==================== S11 ==================== -->
+<h2 id="s11">11. Analityka opisowa (StatisticsService)</h2>
+
+<p>Plik: <span class="file-path">app/services/analytics/statistics.py</span></p>
+<p>
+  Wszystkie agregacje filtrują <code>WHERE invoices.invoice_role = :role</code> — domyślny parametr API
+  <code>role=cost</code>. Dzięki temu wykres „wydatków” nie miesza faktur sprzedaży.
+</p>
+
+<h3>11.1. get_structure(role) — wykres struktury</h3>
+<ul>
+  <li><strong>role=cost:</strong> grupowanie po <code>COALESCE(ai_category_main, 'Niesklasyfikowane')</code></li>
+  <li><strong>role=sales:</strong> grupowanie po <code>product_name</code> (pozycje faktury)</li>
+</ul>
+<pre>
+SELECT [category_expr], SUM(line_net_value)
+FROM invoice_lines JOIN invoices
+WHERE tenant_id = :tenant_id AND invoice_role = :role
+GROUP BY category_expr ORDER BY total_net DESC
+</pre>
+
+<h3>11.2. get_trend(role) — trend miesięczny</h3>
+<p>Suma <code>line_net_value</code> wg <code>date_trunc('month', issue_date)</code>, filtrowana po <code>invoice_role</code>.</p>
+
+<h3>11.3. get_top_counterparties(role) — ranking kontrahentów</h3>
+<table>
+  <tr><th>role</th><th>Kolumna GROUP BY</th><th>Znaczenie w UI</th></tr>
+  <tr><td>cost</td><td>seller_nip</td><td>Top dostawcy</td></tr>
+  <tr><td>sales</td><td>buyer_nip</td><td>Top klienci</td></tr>
+</table>
+
+<!-- ==================== S11b ==================== -->
+<h2 id="s11b">11b. Role faktur — model domenowy</h2>
+
+<p>Kolumna <code>invoices.invoice_role</code> jest ustawiana podczas ETL/sync, nie wyliczana ad hoc w UI.</p>
+<div class="flow-stack">
+  <div class="flow-box flow-box--process">
+    <strong>Źródło wartości</strong>
+    <p>POST /ksef/sync → <code>subject_type</code> → <code>ksef_subject_to_role()</code> → ETL</p>
+  </div>
+  <div class="flow-arrow"><span class="arrow-icon">↓</span></div>
+  <div class="flow-box flow-box--data">
+    <strong>Wpływ na system</strong>
+    <div class="flow-tags">
+      <span>StatisticsService filtruje role</span>
+      <span>Dashboard: zakładki Koszty / Sprzedaż</span>
+      <span>InvoiceList filtruje listę</span>
+    </div>
+  </div>
+</div>
+<p>
+  Backfill migracji 004: istniejące faktury gdzie <code>seller_nip = tenants.nip</code> oznaczone jako <code>sales</code>.
+</p>
+
+<!-- ==================== S11c ==================== -->
+<h2 id="s11c">11c. API faktur (InvoiceService)</h2>
+
+<p>Plik: <span class="file-path">app/services/invoices.py</span>, router <span class="file-path">api/v1/endpoints/invoices.py</span></p>
+
+<h3>list_invoices(role?, limit?)</h3>
+<p>
+  JOIN invoices + agregacja SUM(line_net_value), COUNT(lines). Sortowanie: <code>issue_date DESC</code>.
+  Zwraca <code>InvoiceListItem</code> z polem <code>total_net</code> i <code>line_count</code>.
+</p>
+
+<h3>get_invoice(invoice_id)</h3>
+<p>
+  Pojedyncza faktura z <code>selectinload(lines)</code>. Sumuje total_net z pozycji.
+  HTTP 404 gdy brak lub inny tenant (RLS).
+</p>
+
+<h3>Przykład odpowiedzi listy</h3>
+<pre>
+GET /api/v1/invoices?role=sales
+[
+  {
+    "id": "…",
+    "invoice_number": "1",
+    "issue_date": "2026-08-02",
+    "seller_nip": "1186638420",
+    "buyer_nip": "…",
+    "invoice_role": "sales",
+    "total_net": "1234.00",
+    "line_count": 4
+  }
+]
+</pre>
+
+<!-- ==================== S12 ==================== -->
+<h2 id="s12">12. Frontend — dashboard i przeglądanie faktur</h2>
+
+<p>
+  Frontend (Next.js 16, App Router, Turbopack) to cienki klient analityczny. Logika biznesowa
+  (filtry role, agregacje, RLS) pozostaje w backendie; UI tylko wyświetla dane i nawiguje.
+</p>
+
+<h3>12.1. Stos i struktura katalogów</h3>
+<table>
+  <tr><th>Technologia</th><th>Rola</th></tr>
+  <tr><td>Next.js 16 App Router</td><td><span class="file-path">app/page.tsx</span>, <span class="file-path">app/invoices/[id]/page.tsx</span></td></tr>
+  <tr><td>React 19 + useEffect</td><td>Pobieranie danych przy mount / zmianie zakładki</td></tr>
+  <tr><td>Recharts</td><td>Wykres słupkowy (trend) i kołowy (struktura)</td></tr>
+  <tr><td>Tailwind CSS 4</td><td>Stylowanie, dark mode przez prefers-color-scheme</td></tr>
+  <tr><td>lucide-react</td><td>Ikony (HydrationSafeIcon — omija Dark Reader mismatch)</td></tr>
+</table>
+
+<h3>12.2. Konfiguracja (<span class="file-path">frontend/.env.local</span>)</h3>
+<table>
+  <tr><th>Zmienna</th><th>Przykład</th><th>Mechanizm</th></tr>
+  <tr><td>NEXT_PUBLIC_API_BASE_URL</td><td>http://127.0.0.1:8000/api/v1</td><td>Bazowy URL w <code>apiFetch</code></td></tr>
+  <tr><td>NEXT_PUBLIC_DEV_TOKEN</td><td>JWT HS256</td><td>Wstrzykiwany jako <code>Authorization: Bearer</code></td></tr>
+</table>
+<p>
+  Token musi zawierać <code>tenant_id</code> zgodny z danymi w bazie i być podpisany tym samym
+  <code>JWT_SECRET_KEY</code> co backend. Generowanie: <code>create_dev_token.py --nip &lt;NIP&gt;</code>.
+  Po zmianie tokena wymagany restart <code>npm run dev</code> (zmienne NEXT_PUBLIC_*).
+</p>
+
+<h3>12.3. Klient HTTP (<span class="file-path">frontend/lib/api.ts</span>)</h3>
+<ul>
+  <li><code>apiFetch(path, params?)</code> — GET, buduje URL z query string, <code>cache: no-store</code></li>
+  <li><code>ApiError</code> — status HTTP + treść błędu z backendu</li>
+  <li><code>toNumber()</code> — Decimal z JSON (PostgreSQL) → number</li>
+  <li><code>formatPln()</code> — formatowanie PLN w UI i tooltipach</li>
+</ul>
+
+<h3>12.4. Model UI — zakładki Koszty / Sprzedaż</h3>
+<p>Komponent <span class="file-path">components/DashboardView.tsx</span> trzyma stan <code>role: 'cost' | 'sales'</code>.</p>
+<div class="flow-stack">
+  <div class="flow-box flow-box--api">
+    <strong>DashboardRoleTabs</strong>
+    <p>Przełącza role → wszystkie wykresy i lista refetch z nowym parametrem API</p>
+  </div>
+  <div class="flow-arrow"><span class="arrow-icon">↓</span></div>
+  <div class="flow-box flow-box--process">
+    <strong>Komponenty z props role</strong>
+    <div class="flow-tags">
+      <span>TrendChart</span>
+      <span>CostStructureChart</span>
+      <span>TopCounterpartiesList</span>
+      <span>InvoiceList</span>
+    </div>
+  </div>
+</div>
+<p>Labelki i kolory z <span class="file-path">lib/types.ts</span> → <code>ROLE_LABELS</code> (niebieski = koszty, zielony = sprzedaż).</p>
+
+<h3>12.5. Komponenty dashboardu</h3>
+<table>
+  <tr><th>Komponent</th><th>Endpoint</th><th>Zachowanie wg role</th></tr>
+  <tr><td>TrendChart</td><td>/stats/trend?role=</td><td>Tytuł: wydatki vs przychody; kolor słupka</td></tr>
+  <tr><td>CostStructureChart</td><td>/stats/cost-structure?role=</td><td>cost: kategorie AI; sales: nazwy pozycji (P_7)</td></tr>
+  <tr><td>TopCounterpartiesList</td><td>/stats/top-counterparties?role=</td><td>cost: dostawcy; sales: klienci (buyer_nip)</td></tr>
+  <tr><td>InvoiceList</td><td>/invoices?role=</td><td>Tabela z linkiem do szczegółów</td></tr>
+  <tr><td>DevSetupBanner</td><td>—</td><td>tenant_id z JWT, podpowiedzi sync/ETL</td></tr>
+</table>
+
+<h3>12.6. Przeglądanie faktury — <span class="file-path">app/invoices/[id]/page.tsx</span></h3>
+<p>Strona szczegółów (client component):</p>
+<ol>
+  <li><code>GET /api/v1/invoices/{id}</code> po wejściu na URL</li>
+  <li>Nagłówek: numer, KSeF, badge Koszt/Sprzedaż, suma netto</li>
+  <li>Metadane: P_1, P_6, NIP sprzedawcy i nabywcy</li>
+  <li>Tabela pozycji: P_7, ilość, cena, wartość netto</li>
+  <li>Dla <code>invoice_role=cost</code>: dodatkowe kolumny kategorii AI i pewności</li>
+  <li>Link „Panel” → powrót na <code>/</code></li>
+</ol>
+
+<h3>12.7. Hydration i rozszerzenia przeglądarki</h3>
+<p>
+  <code>HydrationSafeIcon</code> renderuje ikony Lucide po <code>useEffect</code> (po mount),
+  aby uniknąć błędów hydracji gdy Dark Reader modyfikuje atrybuty SVG przed React.
+  <code>suppressHydrationWarning</code> na <code>&lt;html&gt;</code> i <code>&lt;body&gt;</code> w layout.
+</p>
+
+<h3>12.8. Typowe problemy UI</h3>
+<table>
+  <tr><th>Objaw</th><th>Przyczyna</th><th>Rozwiązanie</th></tr>
+  <tr><td>Failed to fetch</td><td>CORS / backend down / zły port</td><td>Sprawdź CORS (3000/3001), uvicorn 8000</td></tr>
+  <tr><td>401 Unauthorized</td><td>JWT wygasł lub zły secret</td><td>create_dev_token.py + restart frontend</td></tr>
+  <tr><td>Pusty dashboard (Koszty)</td><td>Dane to faktury sales</td><td>Przełącz zakładkę Sprzedaż</td></tr>
+  <tr><td>Brak faktur w KSeF sync</td><td>Zły subject_type lub zakres dat</td><td>probe_ksef_invoices.py, Subject1 dla wystawionych</td></tr>
+</table>
+
+<!-- ==================== S13 ==================== -->
+<h2 id="s13">13. Skrypty deweloperskie</h2>
+
+<table>
+  <tr><th>Skrypt</th><th>Wymagania</th><th>Co robi</th></tr>
+  <tr>
+    <td>create_dev_token.py</td>
+    <td>PostgreSQL (opcjonalnie dla --nip)</td>
+    <td>Generuje JWT 24h. Args: UUID lub <code>--nip 9998887776</code></td>
+  </tr>
+  <tr>
+    <td>test_etl_pipeline.py</td>
+    <td>PostgreSQL + Ollama + migracje</td>
+    <td>Pełny ETL na fixture XML, tenant testowy NIP 9998887776</td>
+  </tr>
+  <tr>
+    <td>test_parse_fa3_xml.py</td>
+    <td>Brak (offline)</td>
+    <td>Parsuje XML, wypisuje JSON nagłówka i wierszy</td>
+  </tr>
+  <tr>
+    <td>test_ai_categorization.py</td>
+    <td>Ollama</td>
+    <td>Testuje 3 przykładowe nazwy produktów bez bazy</td>
+  </tr>
+  <tr>
+    <td>probe_ksef_invoices.py</td>
+    <td>KSEF_TOKEN, KSEF_NIP</td>
+    <td>Diagnostika: metadata + export count dla Subject1/Subject2 i zakresów dat</td>
+  </tr>
+  <tr>
+    <td>test_ksef_auth.py</td>
+    <td>KSEF_NIP, KSEF_TOKEN w .env</td>
+    <td>Pełny flow uwierzytelniania KSeF, wypisuje tokeny</td>
+  </tr>
+</table>
+
+<!-- ==================== S14 ==================== -->
+<h2 id="s14">14. Testy automatyczne</h2>
+
+<p>Uruchomienie: <code>cd backend &amp;&amp; .venv\Scripts\pytest tests/ -v</code></p>
+
+<table>
+  <tr><th>Plik</th><th>Zakres</th><th>Baza</th></tr>
+  <tr><td>test_fa3_parser.py</td><td>Parsowanie fixture, XXE, brak wierszy</td><td>—</td></tr>
+  <tr><td>test_ai_categorizer.py</td><td>Izolacja P_7, dynamiczny schemat, prompt</td><td>—</td></tr>
+  <tr><td>test_dynamic_schema.py</td><td>Literal validation, injection w prompt</td><td>—</td></tr>
+  <tr><td>test_etl_pipeline.py</td><td>Pełny ETL z mockiem AI</td><td>SQLite async</td></tr>
+  <tr><td>test_statistics.py</td><td>Agregacje stats + filtr role=cost + daty</td><td>PostgreSQL</td></tr>
+  <tr><td>test_ksef_crypto.py</td><td>AES-256-CBC, długości klucza/IV</td><td>—</td></tr>
+  <tr><td>test_ksef_sync.py</td><td>Sync flow z mockami KSeF (bez sieci)</td><td>SQLite async</td></tr>
+</table>
+<p>Smoke: <code>pytest tests/test_ksef_crypto.py tests/test_ksef_sync.py tests/test_etl_pipeline.py</code></p>
+
+<!-- ==================== S15 ==================== -->
+<h2 id="s15">15. Diagramy przepływu danych</h2>
+
+<h3>15.1. Od XML do wykresu (pełna ścieżka produkcyjna docelowa)</h3>
+<div class="pipeline-v">
+  <div class="pipeline-h" style="justify-content:center;">
+    <div class="pipeline-node pipeline-node--highlight"><strong>KSeF API</strong><small>POST /invoices/exports</small></div>
+    <span class="pipeline-arrow">→</span>
+    <div class="pipeline-node"><strong>POST /ksef/sync</strong><small>Subject1 / Subject2</small></div>
+    <span class="pipeline-arrow">→</span>
+    <div class="pipeline-node pipeline-node--highlight"><strong>InvoiceEtlPipeline</strong><small>orkiestrator</small></div>
+  </div>
+
+  <div class="pipeline-down">↓</div>
+
+  <div class="pipeline-row">
+    <div class="pipeline-node"><strong>fa3_parser</strong><small>P_1 … P_11</small></div>
+    <div class="pipeline-node"><strong>ProductCategorizer</strong><small>tylko P_7 → Ollama</small></div>
+    <div class="pipeline-node"><strong>PostgreSQL</strong><small>RLS per tenant</small></div>
+  </div>
+
+  <div class="pipeline-down">↓</div>
+
+  <div class="pipeline-node pipeline-node--highlight" style="display:inline-block;">
+    <strong>StatisticsService</strong><small>SQL GROUP BY</small>
+  </div>
+
+  <div class="pipeline-down">↓</div>
+
+  <div class="pipeline-node" style="display:inline-block;">
+    <strong>FastAPI</strong><small>/api/v1/stats/*</small>
+  </div>
+
+  <div class="pipeline-down">↓</div>
+
+  <div class="pipeline-node" style="display:inline-block;">
+    <strong>Frontend</strong><small>zakładki role → Recharts + lista faktur</small>
+  </div>
+</div>
+
+<h3>15.2. Izolacja tenanta w żądaniu HTTP</h3>
+<div class="http-flow">
+  <div class="http-step">
+    <div class="dot-col"><div class="dot"></div><div class="line"></div></div>
+    <div class="content"><strong>1.</strong> Przeglądarka: <code>fetch</code> + nagłówek <code>Authorization: Bearer &lt;JWT&gt;</code></div>
+  </div>
+  <div class="http-step">
+    <div class="dot-col"><div class="dot"></div><div class="line"></div></div>
+    <div class="content"><strong>2.</strong> FastAPI <code>get_current_tenant</code> — dekodowanie JWT, wyciągnięcie <code>tenant_id</code></div>
+  </div>
+  <div class="http-step">
+    <div class="dot-col"><div class="dot"></div><div class="line"></div></div>
+    <div class="content"><strong>3.</strong> <code>get_rls_session</code> — <code>BEGIN</code> + <code>set_config('app.current_tenant', uuid, true)</code></div>
+  </div>
+  <div class="http-step">
+    <div class="dot-col"><div class="dot"></div><div class="line"></div></div>
+    <div class="content"><strong>4.</strong> <code>StatisticsService</code> — <code>SELECT</code> z <code>invoice_lines</code> JOIN <code>invoices</code></div>
+  </div>
+  <div class="http-step">
+    <div class="dot-col"><div class="dot"></div><div class="line"></div></div>
+    <div class="content"><strong>5.</strong> PostgreSQL RLS — polityka filtruje wiersze: <code>tenant_id = app.current_tenant</code></div>
+  </div>
+  <div class="http-step">
+    <div class="dot-col"><div class="dot"></div><div class="line"></div></div>
+    <div class="content"><strong>6.</strong> Odpowiedź JSON do klienta</div>
+  </div>
+  <div class="http-step">
+    <div class="dot-col"><div class="dot"></div></div>
+    <div class="content"><strong>7.</strong> <code>COMMIT</code> — zamknięcie transakcji, reset <code>SET LOCAL</code></div>
+  </div>
+</div>
+
+<!-- ==================== S16 ==================== -->
+<h2 id="s16">16. Mapowanie FA(3) → baza danych</h2>
+
+<table>
+  <tr><th>Element XML FA(3)</th><th>XPath / lokalizacja</th><th>Tabela.kolumna</th></tr>
+  <tr><td>Numer faktury</td><td>Fa/P_2</td><td>invoices.invoice_number</td></tr>
+  <tr><td>Data wystawienia</td><td>Fa/P_1</td><td>invoices.issue_date</td></tr>
+  <tr><td>Data sprzedaży</td><td>Fa/P_6</td><td>invoices.sale_date</td></tr>
+  <tr><td>NIP sprzedawcy</td><td>Podmiot1/*/NIP</td><td>invoices.seller_nip</td></tr>
+  <tr><td>NIP nabywcy</td><td>Podmiot2/*/NIP</td><td>invoices.buyer_nip</td></tr>
+  <tr><td>Numer KSeF</td><td>(metadane KSeF)</td><td>invoices.ksef_number</td></tr>
+  <tr><td>Rola faktury</td><td>sync subjectType</td><td>invoices.invoice_role (cost | sales)</td></tr>
+  <tr><td>Nazwa towaru</td><td>Fa/FaWiersz/P_7</td><td>invoice_lines.product_name → AI</td></tr>
+  <tr><td>Ilość</td><td>Fa/FaWiersz/P_8B</td><td>invoice_lines.quantity</td></tr>
+  <tr><td>Cena jedn. netto</td><td>Fa/FaWiersz/P_9A</td><td>invoice_lines.unit_price</td></tr>
+  <tr><td>Wartość netto</td><td>Fa/FaWiersz/P_11</td><td>invoice_lines.line_net_value</td></tr>
+  <tr><td>—</td><td>Ollama output</td><td>invoice_lines.ai_category_main/sub/confidence</td></tr>
+</table>
+
+<!-- ==================== S17 ==================== -->
+<h2 id="s17">17. Luki implementacyjne i roadmap</h2>
+
+<table>
+  <tr><th>Obszar</th><th>Status</th><th>Uwagi</th></tr>
+  <tr><td>Auth produkcyjne (OAuth/login)</td><td>Brak</td><td>Tylko dev JWT</td></tr>
+  <tr><td>REST upload XML / trigger ETL</td><td>Brak</td><td>Sync KSeF + skrypt CLI</td></tr>
+  <tr><td>KSeF sync na żądanie</td><td><strong>Zaimplementowane</strong></td><td>POST /ksef/sync; Subject1 + Subject2</td></tr>
+  <tr><td>Dashboard Koszty / Sprzedaż</td><td><strong>Zaimplementowane</strong></td><td>Zakładki, filtr role w API i UI</td></tr>
+  <tr><td>Przeglądanie faktur</td><td><strong>Zaimplementowane</strong></td><td>GET /invoices, /invoices/{id}</td></tr>
+  <tr><td>KSeF worker HWM w tle</td><td>Odłożone</td><td>Sync ręczny z wybranym zakresem</td></tr>
+  <tr><td>InflationEngine / anomalie</td><td>Brak</td><td>Odłożone w planie MVP</td></tr>
+  <tr><td>Refresh token KSeF rotation</td><td>Brak</td><td>redeem jednorazowy per sync</td></tr>
+  <tr><td>React Query / SWR</td><td>Brak</td><td>useEffect + apiFetch per komponent</td></tr>
+  <tr><td>RLS na tenants</td><td>Brak (zamierzone)</td><td>Lookup po NIP bez kontekstu tenanta</td></tr>
+</table>
+
+<hr style="margin-top: 40px;" />
+<p class="meta" style="text-align: center;">
+  Wirtualny CFO – Dokumentacja techniczna v2.0 &nbsp;|&nbsp; 2026-08-02 &nbsp;|&nbsp; Stack: FastAPI + PostgreSQL + KSeF 2.0 + Ollama + Next.js
+</p>
+
+</body>
+</html>

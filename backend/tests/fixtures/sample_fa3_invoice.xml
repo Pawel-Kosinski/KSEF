@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/"
+         xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Naglowek>
+    <KodFormularza kodSystemowy="FA (3)" wersjaSchemy="1-0E">FA</KodFormularza>
+    <WariantFormularza>3</WariantFormularza>
+    <DataWytworzeniaFa>2026-01-15T10:00:00Z</DataWytworzeniaFa>
+  </Naglowek>
+  <Podmiot1>
+  <DaneIdentyfikacyjne>
+    <NIP>5265877635</NIP>
+    <Nazwa>Dostawca Testowy Sp. z o.o.</Nazwa>
+  </DaneIdentyfikacyjne>
+  </Podmiot1>
+  <Podmiot2>
+  <DaneIdentyfikacyjne>
+    <NIP>1234567890</NIP>
+    <Nazwa>Nabywca Testowy Sp. z o.o.</Nazwa>
+  </DaneIdentyfikacyjne>
+  </Podmiot2>
+  <Fa>
+    <P_1>2026-01-15</P_1>
+    <P_2>FV/2026/01/001</P_2>
+    <P_6>2026-01-14</P_6>
+    <P_13_1>500.00</P_13_1>
+    <P_15>615.00</P_15>
+    <FaWiersz>
+      <P_7>Elektrody spawalnicze 3.2mm</P_7>
+      <P_8B>10</P_8B>
+      <P_9A>25.50</P_9A>
+      <P_11>255.00</P_11>
+    </FaWiersz>
+    <FaWiersz>
+      <P_7>Olej napędowy ON</P_7>
+      <P_8B>100</P_8B>
+      <P_9A>2.45</P_9A>
+      <P_11>245.00</P_11>
+    </FaWiersz>
+  </Fa>
+</Faktura>
