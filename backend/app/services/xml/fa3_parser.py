@@ -1,17 +1,16 @@
 """
 Bezpieczny parser XML dla schematu FA(3) KSeF.
 
-Zgodnie z planem projektu:
-- lxml z resolve_entities=False, no_network=True (ochrona przed XXE)
-- XPath //tns:Fa/tns:FaWiersz z obsługą namespace
-- Ekstrakcja P_7, P_8B, P_9A, P_11 jako Decimal
+- defusedxml.ElementTree – ochrona przed XXE / entity expansion
+- Iteracja po drzewie z obsługą namespace FA(3)
 """
 
 from decimal import Decimal, InvalidOperation
 from datetime import date
 from pathlib import Path
+from xml.etree.ElementTree import Element
 
-from lxml import etree
+import defusedxml.ElementTree as DefusedET
 
 from app.services.xml.models import Fa3InvoiceHeader, Fa3InvoiceLine, Fa3ParseResult
 
@@ -25,21 +24,7 @@ class Fa3XmlParserError(Exception):
     """Błąd parsowania faktury FA(3)."""
 
 
-def get_secure_parser() -> etree.XMLParser:
-    """
-    Parser obronny – wzorzec z dokumentacji projektu.
-    Wyłącza encje zewnętrzne i dostęp do sieci (XXE / Billion Laughs).
-    """
-    return etree.XMLParser(
-        resolve_entities=False,
-        no_network=True,
-        dtd_validation=False,
-        load_dtd=False,
-        huge_tree=False,
-    )
-
-
-def _detect_namespace(root: etree._Element) -> str:
+def _detect_namespace(root: Element) -> str:
     if root.tag.startswith("{"):
         return root.tag.split("}")[0].strip("{")
     return FA3_NAMESPACE
@@ -51,7 +36,7 @@ def _local_name(tag: str) -> str:
     return tag
 
 
-def _find_child(parent: etree._Element, local_name: str) -> etree._Element | None:
+def _find_child(parent: Element, local_name: str) -> Element | None:
     for child in parent:
         if _local_name(child.tag) == local_name:
             return child
@@ -68,7 +53,7 @@ def _parse_decimal(value: str | None, field: str) -> Decimal:
         raise Fa3XmlParserError(f"Nieprawidłowa wartość {field}: {value!r}") from exc
 
 
-def _text_of(parent: etree._Element | None, local_name: str) -> str | None:
+def _text_of(parent: Element | None, local_name: str) -> str | None:
     if parent is None:
         return None
     child = _find_child(parent, local_name)
@@ -86,7 +71,7 @@ def _parse_date(value: str | None, field: str) -> date:
         raise Fa3XmlParserError(f"Nieprawidłowa data {field}: {value!r}") from exc
 
 
-def _extract_nip(podmiot: etree._Element | None) -> str:
+def _extract_nip(podmiot: Element | None) -> str:
     if podmiot is None:
         raise Fa3XmlParserError("Brak podmiotu na fakturze")
     for el in podmiot.iter():
@@ -95,7 +80,7 @@ def _extract_nip(podmiot: etree._Element | None) -> str:
     raise Fa3XmlParserError("Brak NIP podmiotu")
 
 
-def _extract_party_name(podmiot: etree._Element | None) -> str | None:
+def _extract_party_name(podmiot: Element | None) -> str | None:
     if podmiot is None:
         return None
     dane = _find_child(podmiot, "DaneIdentyfikacyjne")
@@ -107,7 +92,7 @@ def _extract_party_name(podmiot: etree._Element | None) -> str | None:
     return _text_of(dane, "Nazwa")
 
 
-def _sum_decimal_children(parent: etree._Element, prefix: str) -> Decimal | None:
+def _sum_decimal_children(parent: Element, prefix: str) -> Decimal | None:
     total = Decimal("0")
     found = False
     for child in parent:
@@ -118,7 +103,7 @@ def _sum_decimal_children(parent: etree._Element, prefix: str) -> Decimal | None
     return total if found else None
 
 
-def _extract_header_totals(fa: etree._Element) -> tuple[Decimal | None, Decimal | None, Decimal | None]:
+def _extract_header_totals(fa: Element) -> tuple[Decimal | None, Decimal | None, Decimal | None]:
     total_net = _sum_decimal_children(fa, "P_13_")
     total_vat = _sum_decimal_children(fa, "P_14_")
     gross_raw = _text_of(fa, "P_15")
@@ -130,26 +115,18 @@ def _extract_header_totals(fa: etree._Element) -> tuple[Decimal | None, Decimal 
     return total_net, total_vat, total_gross
 
 
-def _find_fa_element(root: etree._Element, ns: dict[str, str]) -> etree._Element:
-    fa_nodes = root.xpath("//tns:Fa", namespaces=ns)
-    if fa_nodes:
-        return fa_nodes[0]
+def _find_fa_element(root: Element) -> Element:
     for el in root.iter():
         if _local_name(el.tag) == "Fa":
             return el
     raise Fa3XmlParserError("Nie znaleziono sekcji Fa")
 
 
-def _extract_header(root: etree._Element, ns: dict[str, str]) -> Fa3InvoiceHeader:
-    fa = _find_fa_element(root, ns)
+def _extract_header(root: Element) -> Fa3InvoiceHeader:
+    fa = _find_fa_element(root)
 
-    podmiot1 = root.xpath("//tns:Podmiot1", namespaces=ns)
-    podmiot2 = root.xpath("//tns:Podmiot2", namespaces=ns)
-    if not podmiot1 or not podmiot2:
-        podmiot1_el = next((el for el in root.iter() if _local_name(el.tag) == "Podmiot1"), None)
-        podmiot2_el = next((el for el in root.iter() if _local_name(el.tag) == "Podmiot2"), None)
-    else:
-        podmiot1_el, podmiot2_el = podmiot1[0], podmiot2[0]
+    podmiot1_el = next((el for el in root.iter() if _local_name(el.tag) == "Podmiot1"), None)
+    podmiot2_el = next((el for el in root.iter() if _local_name(el.tag) == "Podmiot2"), None)
 
     sale_raw = _text_of(fa, "P_6")
     total_net, total_vat, total_gross = _extract_header_totals(fa)
@@ -167,7 +144,7 @@ def _extract_header(root: etree._Element, ns: dict[str, str]) -> Fa3InvoiceHeade
     )
 
 
-def _extract_line(row: etree._Element, index: int) -> Fa3InvoiceLine:
+def _extract_line(row: Element, index: int) -> Fa3InvoiceLine:
     p7 = _find_child(row, "P_7")
     p8b = _find_child(row, "P_8B")
     p9a = _find_child(row, "P_9A")
@@ -185,40 +162,40 @@ def _extract_line(row: etree._Element, index: int) -> Fa3InvoiceLine:
     )
 
 
+def _extract_fa_wiersz_rows(root: Element) -> list[Element]:
+    rows: list[Element] = []
+    for fa in root.iter():
+        if _local_name(fa.tag) != "Fa":
+            continue
+        for child in fa:
+            if _local_name(child.tag) == "FaWiersz":
+                rows.append(child)
+    return rows
+
+
 def parse_fa3_xml(xml_content: bytes | str) -> Fa3ParseResult:
     """
     Parsuje surowy XML FA(3) i zwraca listę wierszy faktury.
 
-    Ścieżka XPath: //tns:Fa/tns:FaWiersz (z dynamicznym namespace z dokumentu).
+    Ścieżka logiczna: Fa / FaWiersz (z dynamicznym namespace z dokumentu).
     """
     if isinstance(xml_content, str):
         xml_bytes = xml_content.encode("utf-8")
     else:
         xml_bytes = xml_content
 
-    parser = get_secure_parser()
     try:
-        root = etree.fromstring(xml_bytes, parser=parser)
-    except etree.XMLSyntaxError as exc:
+        root = DefusedET.fromstring(xml_bytes)
+    except DefusedET.ParseError as exc:
         raise Fa3XmlParserError(f"Nieprawidłowy XML: {exc}") from exc
 
     namespace = _detect_namespace(root)
-    ns = {"tns": namespace}
 
-    rows = root.xpath("//tns:Fa/tns:FaWiersz", namespaces=ns)
+    rows = _extract_fa_wiersz_rows(root)
     if not rows:
-        rows = [
-            el
-            for el in root.iter()
-            if _local_name(el.tag) == "FaWiersz"
-            and el.getparent() is not None
-            and _local_name(el.getparent().tag) == "Fa"
-        ]
+        raise Fa3XmlParserError("Nie znaleziono wierszy faktury (Fa/FaWiersz)")
 
-    if not rows:
-        raise Fa3XmlParserError("Nie znaleziono wierszy faktury (//tns:Fa/tns:FaWiersz)")
-
-    header = _extract_header(root, ns)
+    header = _extract_header(root)
     if not header.invoice_number:
         raise Fa3XmlParserError("Brak numeru faktury (P_2)")
 
@@ -227,7 +204,7 @@ def parse_fa3_xml(xml_content: bytes | str) -> Fa3ParseResult:
 
 
 def parse_fa3_xml_file(path: str | Path) -> Fa3ParseResult:
-    """Wczytuje plik XML z dysku i parsuje go jako FA(3)."""
+    """Wczytuje plik XML z dysku i parsuje go jako FA(3) – tylko do testów/skryptów."""
     file_path = Path(path)
     if not file_path.is_file():
         raise Fa3XmlParserError(f"Plik nie istnieje: {file_path}")

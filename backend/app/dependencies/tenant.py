@@ -7,7 +7,7 @@ from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.database.session import get_tenant_db
+from app.database.session import async_session_factory, set_tenant_context
 
 security = HTTPBearer(auto_error=False)
 settings = get_settings()
@@ -60,6 +60,18 @@ async def get_current_tenant(
 async def get_rls_session(
     tenant: TenantContext = Depends(get_current_tenant),
 ) -> AsyncGenerator[AsyncSession, None]:
-    """Dependency Injection: sesja DB z aktywnym RLS dla bieżącego tenanta."""
-    async for session in get_tenant_db(tenant.tenant_id):
-        yield session
+    """
+  Sesja DB z RLS – kontekst tenanta ustawiany w transakcji (bezpieczne przy poolingu).
+
+  SET LOCAL via set_config(..., true) jest widoczny tylko w bieżącej transakcji
+  i jest resetowany po COMMIT/ROLLBACK. Przy błędzie wykonujemy rollback.
+  """
+    async with async_session_factory() as session:
+        try:
+            await session.begin()
+            await set_tenant_context(session, tenant.tenant_id)
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

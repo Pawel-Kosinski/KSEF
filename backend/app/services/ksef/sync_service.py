@@ -26,7 +26,7 @@ from app.services.ksef.client import KsefClient
 from app.services.ksef.crypto import (
     ExportEncryptionMaterial,
     build_export_encryption_material,
-    decrypt_aes256_cbc_pkcs7,
+    decrypt_export_package_in_memory,
 )
 from app.services.ksef.exceptions import (
     KsefExportTimeoutError,
@@ -263,12 +263,14 @@ class KsefSyncService:
         xml_documents: list[tuple[str, bytes]] = []
         for part in package.parts:
             encrypted = await self._client.download_export_part(part.url, part.method)
-            zip_bytes = decrypt_aes256_cbc_pkcs7(
+            zip_bytes = decrypt_export_package_in_memory(
                 encrypted,
-                encryption_material.symmetric_key,
-                encryption_material.iv,
+                encryption_material,
             )
-            xml_documents.extend(extract_invoice_xml_from_zip(zip_bytes))
+            del encrypted
+            part_xml = extract_invoice_xml_from_zip(zip_bytes)
+            del zip_bytes
+            xml_documents.extend(part_xml)
 
         for ksef_number, xml_bytes in xml_documents:
             try:
@@ -353,8 +355,10 @@ class KsefSyncService:
 
 def extract_invoice_xml_from_zip(zip_bytes: bytes) -> list[tuple[str, bytes]]:
     """
-    Wyciąga pliki {ksefNumber}.xml z odszyfrowanej paczki ZIP.
+    Wyciąga pliki {ksefNumber}.xml z odszyfrowanej paczki ZIP w RAM (io.BytesIO).
+
     Pomija _metadata.json i inne pliki niebędące fakturami XML.
+    Żadne pliki nie są zapisywane na dysk serwera.
     """
     documents: list[tuple[str, bytes]] = []
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:

@@ -1,12 +1,16 @@
 """
 Serwis kategoryzacji wydatków – Ollama + dynamiczne Structured Outputs per tenant.
+
+Wywołania Ollama (GPU inference) są delegowane do puli wątków via asyncio.to_thread(),
+aby nie blokować event loopa FastAPI.
 """
 
+import asyncio
 import json
 import re
 from typing import Any
 
-from ollama import AsyncClient
+from ollama import Client
 from pydantic import BaseModel
 
 from app.config import Settings, get_settings
@@ -119,20 +123,40 @@ def _assert_product_name_isolation(product_name: str) -> str:
     return cleaned
 
 
+def _ollama_chat_sync(
+    host: str,
+    model: str,
+    messages: list[dict[str, str]],
+    json_schema: dict[str, Any],
+) -> str:
+    """Synchroniczne wywołanie Ollama – uruchamiane w asyncio.to_thread()."""
+    client = Client(host=host)
+    response = client.chat(
+        model=model,
+        messages=messages,
+        format=json_schema,
+        options={
+            "temperature": 0.0,
+            "num_predict": 128,
+        },
+    )
+    return response.message.content or ""
+
+
 class ProductCategorizer:
-    """Asynchroniczny klient Ollama – kategorie definiowane per tenant."""
+    """Klient Ollama – kategorie definiowane per tenant; inference w puli wątków."""
 
     def __init__(
         self,
         host: str | None = None,
         model: str | None = None,
         settings: Settings | None = None,
-        client: AsyncClient | None = None,
+        client: Client | None = None,
     ):
         self._settings = settings or get_settings()
         self._host = host or self._settings.ollama_host
         self._model = model or self._settings.ollama_model
-        self._client = client or AsyncClient(host=self._host)
+        self._sync_client = client
 
     async def classify_product_name(
         self,
@@ -149,29 +173,37 @@ class ProductCategorizer:
         schema_cls = build_category_schema(categories)
         json_schema = build_category_json_schema(categories)
         system_prompt = build_system_prompt(categories)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": f"Sklasyfikuj następującą pozycję z faktury: {safe_name}",
+            },
+        ]
 
         try:
-            response = await self._client.chat(
-                model=self._model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {
-                        "role": "user",
-                        "content": f"Sklasyfikuj następującą pozycję z faktury: {safe_name}",
-                    },
-                ],
-                format=json_schema,
-                options={
-                    "temperature": 0.0,
-                    "num_predict": 128,
-                },
-            )
+            if self._sync_client is not None:
+                response = await asyncio.to_thread(
+                    self._sync_client.chat,
+                    model=self._model,
+                    messages=messages,
+                    format=json_schema,
+                    options={"temperature": 0.0, "num_predict": 128},
+                )
+                content = response.message.content or ""
+            else:
+                content = await asyncio.to_thread(
+                    _ollama_chat_sync,
+                    self._host,
+                    self._model,
+                    messages,
+                    json_schema,
+                )
         except Exception as exc:
             raise AICategorizationError(
                 f"Błąd wywołania Ollama ({self._host}, model={self._model}): {exc}"
             ) from exc
 
-        content = response.message.content
         if not content:
             raise AICategorizationError("Ollama zwróciła pustą odpowiedź")
 

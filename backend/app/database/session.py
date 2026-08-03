@@ -42,21 +42,3 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
-
-
-async def get_tenant_db(
-    tenant_id: UUID,
-) -> AsyncGenerator[AsyncSession, None]:
-    """
-    Sesja z aktywnym RLS: SET LOCAL app.current_tenant przed każdą transakcją.
-    Zmienna jest resetowana automatycznie po COMMIT/ROLLBACK (SET LOCAL).
-    """
-    async with async_session_factory() as session:
-        try:
-            await session.begin()
-            await set_tenant_context(session, tenant_id)
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise

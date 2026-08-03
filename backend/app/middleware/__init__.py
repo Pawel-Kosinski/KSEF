@@ -1,3 +1,3 @@
-from app.middleware.tenant_rls import TenantRLSMiddleware
+"""Middleware tenant – RLS przeniesiony do app.dependencies.tenant.get_rls_session."""
 
-__all__ = ["TenantRLSMiddleware"]
+__all__: list[str] = []

@@ -1,6 +1,5 @@
 from app.services.xml.fa3_parser import (
     Fa3XmlParserError,
-    get_secure_parser,
     parse_fa3_xml,
     parse_fa3_xml_file,
 )
@@ -11,7 +10,6 @@ __all__ = [
     "Fa3InvoiceHeader",
     "Fa3InvoiceLine",
     "Fa3ParseResult",
-    "get_secure_parser",
     "parse_fa3_xml",
     "parse_fa3_xml_file",
 ]

@@ -152,7 +152,8 @@ class KsefClient:
 
     async def download_export_part(self, url: str, method: str = "GET") -> bytes:
         """
-        Pobiera zaszyfrowaną część paczki z pre-signed URL.
+        Pobiera zaszyfrowaną część paczki z pre-signed URL do pamięci (response.content).
+
         Link nie wymaga nagłówka Authorization (OpenAPI KSeF 2.0).
         """
         async with httpx.AsyncClient(timeout=self._timeout, follow_redirects=True) as client:

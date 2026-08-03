@@ -118,6 +118,8 @@ def build_export_encryption_material(
 def decrypt_aes256_cbc_pkcs7(encrypted: bytes, key: bytes, iv: bytes) -> bytes:
     """
     Deszyfruje paczkę ZIP z eksportu KSeF (AES-256-CBC, dopełnienie PKCS#7).
+
+    Operuje wyłącznie na bytes w RAM – bez zapisu na dysk.
     """
     if len(key) != SYMMETRIC_KEY_LENGTH:
         raise ValueError(f"Klucz symetryczny musi mieć {SYMMETRIC_KEY_LENGTH} bajtów")
@@ -130,3 +132,19 @@ def decrypt_aes256_cbc_pkcs7(encrypted: bytes, key: bytes, iv: bytes) -> bytes:
 
     unpadder = sym_padding.PKCS7(128).unpadder()
     return unpadder.update(padded) + unpadder.finalize()
+
+
+def decrypt_export_package_in_memory(
+    encrypted: bytes,
+    material: ExportEncryptionMaterial,
+) -> bytes:
+    """
+    Odszyfrowuje zaszyfrowaną część paczki KSeF w pamięci (io.BytesIO downstream).
+
+    Surowe dane KSeF nie są zapisywane na dysku serwera.
+    """
+    return decrypt_aes256_cbc_pkcs7(
+        encrypted,
+        material.symmetric_key,
+        material.iv,
+    )

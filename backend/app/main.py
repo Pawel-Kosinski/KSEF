@@ -11,7 +11,6 @@ from app.api.v1.router import api_router
 from app.config import get_settings
 from app.database.models import InvoiceLine
 from app.dependencies.tenant import TenantContext, get_current_tenant, get_rls_session
-from app.middleware.tenant_rls import TenantRLSMiddleware
 
 settings = get_settings()
 
@@ -28,7 +27,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(TenantRLSMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
