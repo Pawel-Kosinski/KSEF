@@ -14,7 +14,7 @@ import { Loader2 } from "lucide-react";
 
 import { DashboardCard } from "@/components/DashboardCard";
 import { HydrationSafeIcon } from "@/components/HydrationSafeIcon";
-import { EmptyDataHint } from "@/components/DevSetupBanner";
+import { EmptyDataHint } from "@/components/EmptyDataHint";
 import { apiFetch, formatPln, toNumber } from "@/lib/api";
 import type { InvoiceRole, TrendResponse } from "@/lib/types";
 import { ROLE_LABELS } from "@/lib/types";

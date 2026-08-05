@@ -72,8 +72,3 @@ async def list_invoice_lines(
         select(InvoiceLine).order_by(InvoiceLine.created_at.desc()).limit(100)
     )
     return result.scalars().all()
-
-
-@app.get("/api/v1/me")
-async def get_me(tenant: TenantContext = Depends(get_current_tenant)):
-    return {"tenant_id": str(tenant.tenant_id), "sub": tenant.sub}

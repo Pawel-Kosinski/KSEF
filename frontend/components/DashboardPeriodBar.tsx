@@ -32,12 +32,14 @@ interface DashboardPeriodBarProps {
   range: DateRange;
   onRangeChange: (range: DateRange) => void;
   onSyncComplete?: () => void;
+  ksefConfigured?: boolean;
 }
 
 export function DashboardPeriodBar({
   range,
   onRangeChange,
   onSyncComplete,
+  ksefConfigured = true,
 }: DashboardPeriodBarProps) {
   const [activePreset, setActivePreset] = useState<string | null>("current-month");
   const [progress, setProgress] = useState<string | null>(null);
@@ -63,7 +65,6 @@ export function DashboardPeriodBar({
     }
 
     const chunks = splitDateRange(range.dateFrom, range.dateTo, SYNC_CHUNK_DAYS);
-    const totalSteps = chunks.length * 2;
 
     setSyncing(true);
     setMessage(null);
@@ -72,31 +73,20 @@ export function DashboardPeriodBar({
     let totalProcessed = 0;
     let totalFailed = 0;
     let truncatedPeriods = 0;
-    let step = 0;
 
     try {
-      for (const chunk of chunks) {
-        step += 1;
-        setProgress(`Krok ${step}/${totalSteps}: koszty ${chunk.dateFrom}–${chunk.dateTo}`);
-        const cost = await apiPost<KsefSyncResponse>("/ksef/sync", {
+      for (let index = 0; index < chunks.length; index += 1) {
+        const chunk = chunks[index];
+        setProgress(
+          `Paczka ${index + 1}/${chunks.length}: ${chunk.dateFrom}–${chunk.dateTo} (koszty + sprzedaż)`,
+        );
+        const result = await apiPost<KsefSyncResponse>("/ksef/sync-period", {
           date_from: chunk.dateFrom,
           date_to: chunk.dateTo,
-          subject_type: "Subject2",
         });
-        totalProcessed += cost.invoices_processed;
-        totalFailed += cost.invoices_failed;
-        truncatedPeriods += cost.truncated_periods;
-
-        step += 1;
-        setProgress(`Krok ${step}/${totalSteps}: sprzedaż ${chunk.dateFrom}–${chunk.dateTo}`);
-        const sales = await apiPost<KsefSyncResponse>("/ksef/sync", {
-          date_from: chunk.dateFrom,
-          date_to: chunk.dateTo,
-          subject_type: "Subject1",
-        });
-        totalProcessed += sales.invoices_processed;
-        totalFailed += sales.invoices_failed;
-        truncatedPeriods += sales.truncated_periods;
+        totalProcessed += result.invoices_processed;
+        totalFailed += result.invoices_failed;
+        truncatedPeriods += result.truncated_periods;
       }
 
       let summary = `Zaimportowano ${totalProcessed} faktur z okresu ${range.dateFrom}–${range.dateTo}`;
@@ -168,8 +158,8 @@ export function DashboardPeriodBar({
             <p className="text-xs text-red-600">Nieprawidłowy zakres dat.</p>
           ) : (
             <p className="text-xs text-slate-400">
-              Sync w paczkach {SYNC_CHUNK_DAYS}-dniowych · przy dużej liczbie faktur backend
-              dzieli okres na dni
+              Sync w paczkach {SYNC_CHUNK_DAYS}-dniowych · pierwsze pobranie może trwać kilka
+              minut (KSeF + kategoryzacja)
             </p>
           )}
         </div>
@@ -178,7 +168,12 @@ export function DashboardPeriodBar({
           <button
             type="button"
             onClick={handleSync}
-            disabled={syncing || rangeInvalid}
+            disabled={syncing || rangeInvalid || !ksefConfigured}
+            title={
+              !ksefConfigured
+                ? "Skonfiguruj token KSeF w Ustawieniach"
+                : undefined
+            }
             className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
           >
             {syncing ? (
@@ -188,6 +183,11 @@ export function DashboardPeriodBar({
             )}
             {syncing ? "Pobieranie…" : "Pobierz z KSeF"}
           </button>
+          {syncing && !progress ? (
+            <p className="max-w-xs text-right text-xs text-slate-500">
+              Łączenie z KSeF…
+            </p>
+          ) : null}
           {progress ? (
             <p className="max-w-xs text-right text-xs text-slate-500">{progress}</p>
           ) : null}

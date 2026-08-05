@@ -163,3 +163,32 @@ class ExportStatusResponse(BaseModel):
     package: InvoicePackage | None = None
 
     model_config = {"populate_by_name": True}
+
+
+class InvoiceMetadataDateRange(BaseModel):
+    date_type: str = Field(alias="dateType")
+    from_: str = Field(alias="from")
+    to: str | None = None
+
+    model_config = {"populate_by_name": True, "by_alias": True}
+
+
+class InvoiceMetadataQueryRequest(BaseModel):
+    subject_type: str = Field(alias="subjectType")
+    date_range: InvoiceMetadataDateRange = Field(alias="dateRange")
+
+    model_config = {"populate_by_name": True, "by_alias": True}
+
+
+class InvoiceMetadataItem(BaseModel):
+    ksef_number: str = Field(alias="ksefNumber")
+
+    model_config = {"populate_by_name": True}
+
+
+class InvoiceMetadataQueryResponse(BaseModel):
+    has_more: bool = Field(alias="hasMore")
+    is_truncated: bool = Field(default=False, alias="isTruncated")
+    invoices: list[InvoiceMetadataItem] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}

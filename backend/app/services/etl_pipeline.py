@@ -4,18 +4,25 @@ Potok ETL: XML FA(3) → kategoryzacja AI (P_7) → PostgreSQL (RLS).
 Do modelu AI trafia wyłącznie product_name z pola P_7.
 """
 
+import asyncio
+import logging
 import uuid
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database.models import Invoice, InvoiceLine
 from app.database.session import async_session_factory, set_tenant_context
 from app.services.ai.categorizer import ProductCategorizer
+from app.services.ai.exceptions import AICategorizationError
 from app.services.invoice_roles import resolve_contractor_name
 from app.services.tenant_categories import resolve_tenant_categories
 from app.services.xml.fa3_parser import Fa3XmlParserError, parse_fa3_xml
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -152,10 +159,7 @@ class InvoiceEtlPipeline:
         await session.flush()
 
         for line in parsed.lines:
-            classification = await self._categorizer.classify_product_name(
-                line.product_name,
-                allowed_categories=allowed_categories,
-            )
+            classification = await self._classify_line(line.product_name, allowed_categories)
             session.add(
                 InvoiceLine(
                     id=uuid.uuid4(),
@@ -178,4 +182,36 @@ class InvoiceEtlPipeline:
             invoice_id=invoice.id,
             lines_processed=len(parsed.lines),
             categories_used=allowed_categories,
+        )
+
+    async def _classify_line(
+        self,
+        product_name: str,
+        allowed_categories: list[str],
+    ):
+        timeout = get_settings().ollama_timeout_sec
+        try:
+            return await asyncio.wait_for(
+                self._categorizer.classify_product_name(
+                    product_name,
+                    allowed_categories=allowed_categories,
+                ),
+                timeout=timeout,
+            )
+        except (asyncio.TimeoutError, AICategorizationError) as exc:
+            logger.warning(
+                "Kategoryzacja AI pominięta dla %r (timeout=%ss): %s",
+                product_name,
+                timeout,
+                exc,
+            )
+            return self._fallback_classification(allowed_categories)
+
+    @staticmethod
+    def _fallback_classification(allowed_categories: list[str]):
+        main = allowed_categories[0] if allowed_categories else "Niesklasyfikowane"
+        return SimpleNamespace(
+            kategoria_glowna=main,
+            kategoria_podrzedna="Inne",
+            pewnosc_klasyfikacji=0,
         )

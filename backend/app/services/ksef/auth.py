@@ -44,7 +44,9 @@ class KsefAuthService:
         context_nip = nip or self._settings.ksef_nip
 
         if not token:
-            raise KsefAuthError("Brak tokena KSeF (KSEF_TOKEN)")
+            raise KsefAuthError(
+                "Brak tokena KSeF – skonfiguruj go w ustawieniach konta"
+            )
         if not context_nip:
             raise KsefAuthError("Brak NIP kontekstu (KSEF_NIP)")
 

@@ -8,6 +8,22 @@ from pydantic import BaseModel, Field, model_validator
 SubjectType = Literal["Subject1", "Subject2"]
 
 
+class KsefSyncPeriodRequest(BaseModel):
+    date_from: date = Field(description="Początek zakresu")
+    date_to: date = Field(description="Koniec zakresu")
+
+    @model_validator(mode="after")
+    def validate_order(self) -> "KsefSyncPeriodRequest":
+        if self.date_to < self.date_from:
+            raise ValueError("date_to nie może być wcześniejsza niż date_from")
+        if (self.date_to - self.date_from).days > 90:
+            raise ValueError(
+                "Jeden żądanie sync nie może przekraczać 90 dni — "
+                "użyj krótszych okresów (np. 7 dni)"
+            )
+        return self
+
+
 class KsefSyncRequest(BaseModel):
     date_from: date = Field(description="Początek zakresu (data wystawienia faktury, P_1)")
     date_to: date = Field(description="Koniec zakresu (data wystawienia faktury, P_1)")

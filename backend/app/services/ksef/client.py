@@ -13,6 +13,8 @@ from app.services.ksef.models import (
     ExportInitResponse,
     ExportStatusResponse,
     InvoiceExportRequest,
+    InvoiceMetadataQueryRequest,
+    InvoiceMetadataQueryResponse,
     KsefTokenAuthRequest,
     PublicKeyCertificate,
     TokenRedeemResponse,
@@ -51,6 +53,7 @@ class KsefClient:
         json: dict[str, Any] | None = None,
         bearer_token: str | None = None,
         expected_status: int | tuple[int, ...] = 200,
+        params: dict[str, Any] | None = None,
     ) -> Any:
         headers: dict[str, str] = {"Accept": "application/json"}
         if bearer_token:
@@ -60,7 +63,9 @@ class KsefClient:
 
         url = f"{self._base_url}{path}"
         async with httpx.AsyncClient(timeout=self._timeout) as client:
-            response = await client.request(method, url, headers=headers, json=json)
+            response = await client.request(
+                method, url, headers=headers, json=json, params=params
+            )
 
         if isinstance(expected_status, int):
             expected = (expected_status,)
@@ -162,6 +167,49 @@ class KsefClient:
         if response.status_code != 200:
             raise KsefApiError(
                 f"Pobieranie części paczki → HTTP {response.status_code}",
+                status_code=response.status_code,
+                details=response.text,
+            )
+        return response.content
+
+    async def query_invoice_metadata(
+        self,
+        access_token: str,
+        request: InvoiceMetadataQueryRequest,
+        *,
+        page_offset: int = 0,
+        page_size: int = 250,
+        sort_order: str = "Asc",
+    ) -> InvoiceMetadataQueryResponse:
+        """POST /invoices/query/metadata – lista metadanych faktur."""
+        params = {
+            "pageOffset": page_offset,
+            "pageSize": min(max(page_size, 10), 250),
+            "sortOrder": sort_order,
+        }
+        data = await self._request(
+            "POST",
+            "/invoices/query/metadata",
+            json=request.model_dump(by_alias=True, exclude_none=True),
+            bearer_token=access_token,
+            expected_status=200,
+            params=params,
+        )
+        return InvoiceMetadataQueryResponse.model_validate(data)
+
+    async def download_invoice_xml(self, ksef_number: str, access_token: str) -> bytes:
+        """GET /invoices/ksef/{ksefNumber} – pojedyncza faktura XML."""
+        headers = {
+            "Accept": "application/xml",
+            "Authorization": f"Bearer {access_token}",
+        }
+        url = f"{self._base_url}/invoices/ksef/{ksef_number}"
+        async with httpx.AsyncClient(timeout=self._timeout, follow_redirects=True) as client:
+            response = await client.get(url, headers=headers)
+
+        if response.status_code != 200:
+            raise KsefApiError(
+                f"Pobieranie faktury {ksef_number} → HTTP {response.status_code}",
                 status_code=response.status_code,
                 details=response.text,
             )

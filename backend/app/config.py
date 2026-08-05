@@ -5,7 +5,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(".env", ".env.example"),
+        # .env nadpisuje .env.example (późniejszy plik wygrywa)
+        env_file=(".env.example", ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
     )
@@ -13,6 +14,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://vcfo:vcfo_secret@localhost:5432/wirtualny_cfo"
     jwt_secret_key: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 60 * 24
+    encryption_master_key: str = ""
     app_name: str = "Wirtualny CFO"
     debug: bool = False
 
@@ -28,6 +31,7 @@ class Settings(BaseSettings):
     # Ollama – lokalny SLM (Faza 3)
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:7b"
+    ollama_timeout_sec: float = 45.0
 
 
 @lru_cache

@@ -1,7 +1,4 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
-
-const DEV_TOKEN = process.env.NEXT_PUBLIC_DEV_TOKEN ?? "";
+const API_BASE_URL = "/api/v1";
 
 export class ApiError extends Error {
   constructor(
@@ -22,29 +19,37 @@ function buildHeaders(jsonBody = false): HeadersInit {
     headers["Content-Type"] = "application/json";
   }
 
-  if (DEV_TOKEN) {
-    headers.Authorization = `Bearer ${DEV_TOKEN}`;
+  return headers;
+}
+
+function buildUrl(
+  path: string,
+  params?: Record<string, string | number | undefined>,
+): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const search = new URLSearchParams();
+
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== "") {
+        search.set(key, String(value));
+      }
+    }
   }
 
-  return headers;
+  const query = search.toString();
+  return query
+    ? `${API_BASE_URL}${normalizedPath}?${query}`
+    : `${API_BASE_URL}${normalizedPath}`;
 }
 
 export async function apiFetch<T>(
   path: string,
   params?: Record<string, string | number | undefined>,
 ): Promise<T> {
-  const url = new URL(`${API_BASE_URL}${path}`);
-
-  if (params) {
-    for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined && value !== "") {
-        url.searchParams.set(key, String(value));
-      }
-    }
-  }
-
-  const response = await fetch(url.toString(), {
+  const response = await fetch(buildUrl(path, params), {
     headers: buildHeaders(),
+    credentials: "include",
     cache: "no-store",
   });
 
@@ -60,10 +65,11 @@ export async function apiFetch<T>(
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(buildUrl(path), {
     method: "POST",
     headers: buildHeaders(true),
     body: JSON.stringify(body),
+    credentials: "include",
     cache: "no-store",
   });
 

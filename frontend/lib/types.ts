@@ -2,6 +2,10 @@ export type InvoiceRole = "cost" | "sales";
 
 export type KsefSubjectType = "Subject1" | "Subject2";
 
+export interface KsefSettingsStatus {
+  is_configured: boolean;
+}
+
 export interface KsefSyncResponse {
   export_reference_number: string;
   date_from: string;

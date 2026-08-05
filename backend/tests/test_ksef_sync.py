@@ -15,6 +15,8 @@ from app.services.ksef.exceptions import KsefSyncValidationError
 from app.services.ksef.models import (
     ExportInitResponse,
     ExportStatusResponse,
+    InvoiceMetadataItem,
+    InvoiceMetadataQueryResponse,
     InvoicePackage,
     InvoicePackagePart,
     OperationStatusInfo,
@@ -86,7 +88,14 @@ async def test_ensure_tenant_has_categories_raises_when_empty(db_session):
 @pytest.mark.asyncio
 async def test_sync_invoices_processes_xml_from_mocked_export(db_session):
     tenant_id = uuid.uuid4()
-    db_session.add(Tenant(id=tenant_id, name="Sync Test", nip="9998887776"))
+    db_session.add(
+        Tenant(
+            id=tenant_id,
+            name="Sync Test",
+            nip="9998887776",
+            encrypted_ksef_token="encrypted-test-token",
+        )
+    )
     db_session.add(
         TenantCategory(tenant_id=tenant_id, name="Materiały i Surowce", sort_order=1)
     )
@@ -115,6 +124,14 @@ async def test_sync_invoices_processes_xml_from_mocked_export(db_session):
     encrypted_zip = encryptor.update(padded) + encryptor.finalize()
 
     mock_client = MagicMock()
+    mock_client.query_invoice_metadata = AsyncMock(
+        return_value=InvoiceMetadataQueryResponse(
+            has_more=False,
+            is_truncated=False,
+            invoices=[InvoiceMetadataItem(ksef_number="KSEF-SYNC-001")],
+        )
+    )
+    mock_client.download_invoice_xml = AsyncMock(return_value=sample_xml)
     mock_client.get_public_key_certificates = AsyncMock(return_value=[])
     mock_client.start_invoice_export = AsyncMock(
         return_value=ExportInitResponse(reference_number="EXP-REF-1")
@@ -171,6 +188,7 @@ async def test_sync_invoices_processes_xml_from_mocked_export(db_session):
         auth_service=mock_auth,
         etl_pipeline=InvoiceEtlPipeline(categorizer=mock_categorizer),
     )
+    service._resolve_tenant_ksef_token = lambda _tenant: "test-ksef-token"
 
     # Podmień generowanie materiału szyfrującego stałym kluczem z testu
     from app.services.ksef import sync_service as sync_module
@@ -187,15 +205,15 @@ async def test_sync_invoices_processes_xml_from_mocked_export(db_session):
 
     try:
         result = await service.sync_invoices(
-            db_session,
             tenant_id,
             date(2026, 1, 1),
             date(2026, 1, 31),
+            session=db_session,
         )
     finally:
         sync_module.build_export_encryption_material = original_build
 
-    assert result.export_reference_number == "EXP-REF-1"
+    assert result.export_reference_number == "metadata:Issue"
     assert result.invoices_processed == 1
     assert result.lines_processed == 2
     assert result.invoices_failed == 0
