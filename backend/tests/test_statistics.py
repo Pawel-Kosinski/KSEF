@@ -24,6 +24,7 @@ async def stats_session():
     test_nip = str(tenant_id.int % 9_000_000_000 + 1_000_000_000)
     invoice_jan_id = uuid.uuid4()
     invoice_feb_id = uuid.uuid4()
+    invoice_sales_id = uuid.uuid4()
 
     async with factory() as session:
         await set_tenant_context(session, tenant_id)
@@ -47,6 +48,15 @@ async def stats_session():
                     seller_nip="9876543210",
                     buyer_nip=test_nip,
                     invoice_role="cost",
+                ),
+                Invoice(
+                    id=invoice_sales_id,
+                    tenant_id=tenant_id,
+                    invoice_number="FV/S/01/2026",
+                    issue_date=date(2026, 1, 20),
+                    seller_nip=test_nip,
+                    buyer_nip="1111111111",
+                    invoice_role="sales",
                 ),
                 InvoiceLine(
                     tenant_id=tenant_id,
@@ -77,6 +87,16 @@ async def stats_session():
                     unit_price=Decimal("1000.00"),
                     line_net_value=Decimal("1000.00"),
                     ai_category_main="Koszty Biurowe i IT",
+                ),
+                InvoiceLine(
+                    tenant_id=tenant_id,
+                    invoice_id=invoice_sales_id,
+                    line_number=1,
+                    product_name="Usługa consulting",
+                    quantity=Decimal("1"),
+                    unit_price=Decimal("300.00"),
+                    line_net_value=Decimal("300.00"),
+                    ai_category_main="Usługi",
                 ),
             ]
         )
@@ -160,3 +180,56 @@ async def test_date_filter_excludes_out_of_range(stats_session):
     assert result.total_net == Decimal("1000.00")
     assert len(result.items) == 1
     assert result.items[0].category == "Koszty Biurowe i IT"
+
+
+@pytest.mark.asyncio
+async def test_trend_category_filter_respects_role(stats_session):
+    session, tenant_id = stats_session
+    await set_tenant_context(session, tenant_id)
+    service = StatisticsService(session, tenant_id)
+
+    cost_it = await service.get_trend(role="cost", category="Koszty Biurowe i IT")
+    sales_uslugi = await service.get_trend(role="sales", category="Usługi")
+
+    assert cost_it.total_net == Decimal("1000.00")
+    assert cost_it.role == "cost"
+    assert cost_it.category == "Koszty Biurowe i IT"
+
+    assert sales_uslugi.total_net == Decimal("300.00")
+    assert sales_uslugi.role == "sales"
+    assert sales_uslugi.category == "Usługi"
+
+    # Ta sama nazwa kategorii w innym role nie zwraca danych drugiej strony
+    cost_uslugi = await service.get_trend(role="cost", category="Usługi")
+    assert cost_uslugi.total_net == Decimal("0")
+
+    sales_it = await service.get_trend(role="sales", category="Koszty Biurowe i IT")
+    assert sales_it.total_net == Decimal("0")
+
+
+@pytest.mark.asyncio
+async def test_cashflow_combined_aggregation(stats_session):
+    session, tenant_id = stats_session
+    await set_tenant_context(session, tenant_id)
+    service = StatisticsService(session, tenant_id)
+
+    result = await service.get_cashflow()
+
+    assert result.granularity == "month"
+    assert len(result.items) == 2
+
+    jan = result.items[0]
+    assert jan.date == "2026-01"
+    assert jan.sales == Decimal("300.00")
+    assert jan.costs == Decimal("500.00")
+    assert jan.balance == Decimal("-200.00")
+
+    feb = result.items[1]
+    assert feb.date == "2026-02"
+    assert feb.sales == Decimal("0")
+    assert feb.costs == Decimal("1000.00")
+    assert feb.balance == Decimal("-1000.00")
+
+    assert result.total_sales == Decimal("300.00")
+    assert result.total_costs == Decimal("1500.00")
+    assert result.total_balance == Decimal("-1200.00")

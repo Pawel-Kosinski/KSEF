@@ -4,12 +4,13 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database.models import Invoice, InvoiceLine
 from app.schemas.invoices import InvoiceDetail, InvoiceLineRead, InvoiceListItem
+from app.services.analytics.statistics import UNCATEGORIZED_LABEL
 
 
 class InvoiceNotFoundError(Exception):
@@ -27,6 +28,7 @@ class InvoiceService:
         limit: int = 50,
         date_from: date | None = None,
         date_to: date | None = None,
+        category: str | None = None,
     ) -> list[InvoiceListItem]:
         capped = max(1, min(limit, 100))
         line_sum_expr = func.sum(InvoiceLine.line_net_value).label("lines_net")
@@ -50,6 +52,22 @@ class InvoiceService:
             stmt = stmt.where(Invoice.issue_date >= date_from)
         if date_to is not None:
             stmt = stmt.where(Invoice.issue_date <= date_to)
+        if category is not None:
+            if category == UNCATEGORIZED_LABEL:
+                line_category_filter = InvoiceLine.ai_category_main.is_(None)
+            else:
+                line_category_filter = InvoiceLine.ai_category_main == category
+            category_exists = (
+                select(1)
+                .select_from(InvoiceLine)
+                .where(
+                    InvoiceLine.invoice_id == Invoice.id,
+                    InvoiceLine.tenant_id == self._tenant_id,
+                    line_category_filter,
+                )
+                .correlate(Invoice)
+            )
+            stmt = stmt.where(exists(category_exists))
 
         rows = (await self._session.execute(stmt)).all()
         return [
@@ -68,6 +86,9 @@ class InvoiceService:
                 total_vat=invoice.total_vat,
                 total_gross=invoice.total_gross,
                 line_count=int(line_count or 0),
+                primary_category_main=invoice.primary_category_main,
+                primary_category_sub=invoice.primary_category_sub,
+                primary_category_source=invoice.primary_category_source,
             )
             for invoice, lines_net, line_count in rows
         ]
@@ -100,6 +121,9 @@ class InvoiceService:
             total_net=total_net,
             total_vat=invoice.total_vat,
             total_gross=invoice.total_gross,
+            primary_category_main=invoice.primary_category_main,
+            primary_category_sub=invoice.primary_category_sub,
+            primary_category_source=invoice.primary_category_source,
             lines=[
                 InvoiceLineRead(
                     id=line.id,
@@ -111,6 +135,7 @@ class InvoiceService:
                     ai_category_main=line.ai_category_main,
                     ai_category_sub=line.ai_category_sub,
                     ai_confidence=line.ai_confidence,
+                    category_source=line.category_source,
                 )
                 for line in lines
             ],

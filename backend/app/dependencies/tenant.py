@@ -86,6 +86,17 @@ async def get_current_user(
     return user
 
 
+async def require_admin_user(
+    user: User = Depends(get_current_user),
+) -> User:
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Wymagane uprawnienia administratora",
+        )
+    return user
+
+
 async def get_rls_session(
     tenant: TenantContext = Depends(get_current_tenant),
 ) -> AsyncGenerator[AsyncSession, None]:

@@ -7,11 +7,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.database.models import Base, Invoice, InvoiceLine, Tenant, TenantCategory
+from app.services.ai.classification_result import ClassificationResult
 from app.services.etl_pipeline import InvoiceEtlPipeline
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_fa3_invoice.xml"
@@ -19,10 +19,13 @@ FIXTURE = Path(__file__).parent / "fixtures" / "sample_fa3_invoice.xml"
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 
-class _FakeClassification(BaseModel):
-    kategoria_glowna: str
-    kategoria_podrzedna: str = "test"
-    pewnosc_klasyfikacji: int = Field(default=80, ge=0, le=100)
+def _classification(main: str) -> ClassificationResult:
+    return ClassificationResult(
+        kategoria_glowna=main,
+        kategoria_podrzedna="test",
+        pewnosc_klasyfikacji=80,
+        source="ai",
+    )
 
 
 @pytest_asyncio.fixture
@@ -69,8 +72,8 @@ async def test_etl_pipeline_persists_lines_with_mock_ai(db_session):
     mock_categorizer = MagicMock()
     mock_categorizer.classify_product_name = AsyncMock(
         side_effect=[
-            _FakeClassification(kategoria_glowna="Materiały i Surowce"),
-            _FakeClassification(kategoria_glowna="Paliwa i Transport"),
+            _classification("Materiały i Surowce"),
+            _classification("Paliwa i Transport"),
         ]
     )
 
@@ -113,7 +116,7 @@ async def test_etl_pipeline_respects_invoice_role_with_external_session(db_sessi
 
     mock_categorizer = MagicMock()
     mock_categorizer.classify_product_name = AsyncMock(
-        return_value=_FakeClassification(kategoria_glowna="Materiały i Surowce")
+        return_value=_classification("Materiały i Surowce")
     )
     pipeline = InvoiceEtlPipeline(categorizer=mock_categorizer)
     xml_bytes = FIXTURE.read_bytes()
@@ -146,7 +149,7 @@ async def test_etl_pipeline_skips_duplicate_ksef_and_updates_role(db_session):
 
     mock_categorizer = MagicMock()
     mock_categorizer.classify_product_name = AsyncMock(
-        return_value=_FakeClassification(kategoria_glowna="Materiały i Surowce")
+        return_value=_classification("Materiały i Surowce")
     )
     pipeline = InvoiceEtlPipeline(categorizer=mock_categorizer)
     xml_bytes = FIXTURE.read_bytes()

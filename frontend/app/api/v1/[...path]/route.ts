@@ -41,10 +41,16 @@ async function proxyRequest(request: NextRequest, context: RouteContext) {
     responseHeaders.set("content-type", backendContentType);
   }
 
-  return new NextResponse(backendRes.body, {
+  const response = new NextResponse(backendRes.body, {
     status: backendRes.status,
     headers: responseHeaders,
   });
+
+  if (backendRes.status === 401) {
+    response.cookies.delete(ACCESS_TOKEN_COOKIE);
+  }
+
+  return response;
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {

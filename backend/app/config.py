@@ -32,8 +32,28 @@ class Settings(BaseSettings):
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:7b"
     ollama_timeout_sec: float = 45.0
+    etl_classification_concurrency: int = 3
+
+
+def validate_settings(settings: Settings) -> None:
+    """Walidacja konfiguracji przy starcie – błędy krytyczne w produkcji."""
+    if settings.debug:
+        return
+
+    if not settings.encryption_master_key.strip():
+        raise RuntimeError(
+            "ENCRYPTION_MASTER_KEY jest wymagany gdy DEBUG=false. "
+            'Wygeneruj: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+        )
+
+    if settings.jwt_secret_key in ("change-me-in-production", "change-me-in-production-use-openssl-rand-hex-32"):
+        raise RuntimeError(
+            "JWT_SECRET_KEY musi być zmieniony w produkcji (DEBUG=false)"
+        )
 
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    validate_settings(settings)
+    return settings

@@ -1,62 +1,85 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import { Loader2 } from "lucide-react";
+import { LineChart, Loader2 } from "lucide-react";
 
 import { DashboardCard } from "@/components/DashboardCard";
-import { HydrationSafeIcon } from "@/components/HydrationSafeIcon";
 import { EmptyDataHint } from "@/components/EmptyDataHint";
-import { apiFetch, formatPln, toNumber } from "@/lib/api";
+import { HydrationSafeIcon } from "@/components/HydrationSafeIcon";
+import { formatPln, toNumber } from "@/lib/api";
+import { CHART_DONUT_COLORS, formatPercent } from "@/lib/chartUtils";
 import type { CostStructureResponse, InvoiceRole } from "@/lib/types";
 import { ROLE_LABELS } from "@/lib/types";
 
-const COLORS = [
-  "#2563eb",
-  "#7c3aed",
-  "#0891b2",
-  "#059669",
-  "#d97706",
-  "#dc2626",
-  "#64748b",
-];
-
 interface CostStructureChartProps {
   role: InvoiceRole;
-  refreshKey?: number;
-  dateFrom?: string;
-  dateTo?: string;
+  structure: CostStructureResponse | null;
+  loading?: boolean;
+  onAnalyzeCategory?: (category?: string) => void;
+}
+
+interface SliceData {
+  name: string;
+  value: number;
+  percent: number;
+}
+
+function StructureTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload: SliceData; color?: string }>;
+}) {
+  if (!active || !payload?.length) return null;
+  const slice = payload[0].payload;
+  const color = payload[0].color;
+
+  return (
+    <div className="rounded-xl border border-slate-200/80 bg-white/95 px-4 py-3 shadow-lg backdrop-blur-sm dark:border-slate-600 dark:bg-slate-900/95">
+      <div className="mb-1 flex items-center gap-2">
+        <span
+          className="inline-block h-2.5 w-2.5 rounded-full"
+          style={{ backgroundColor: color }}
+        />
+        <span className="text-sm font-semibold text-slate-900 dark:text-white">
+          {slice.name}
+        </span>
+      </div>
+      <p className="text-sm text-slate-700 dark:text-slate-200">{formatPln(slice.value)}</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">{slice.percent.toFixed(1)}%</p>
+    </div>
+  );
 }
 
 export function CostStructureChart({
   role,
-  refreshKey = 0,
-  dateFrom,
-  dateTo,
+  structure,
+  loading = false,
+  onAnalyzeCategory,
 }: CostStructureChartProps) {
-  const [data, setData] = useState<CostStructureResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const labels = ROLE_LABELS[role];
+  const total = structure ? toNumber(structure.total_net) : 0;
 
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    apiFetch<CostStructureResponse>("/stats/cost-structure", {
-      role,
-      date_from: dateFrom,
-      date_to: dateTo,
-    })
-      .then(setData)
-      .catch((err) => setError(err instanceof Error ? err.message : "Błąd"))
-      .finally(() => setLoading(false));
-  }, [role, refreshKey, dateFrom, dateTo]);
+  const chartData: SliceData[] = useMemo(() => {
+    return (
+      structure?.items.map((item) => {
+        const value = toNumber(item.total_net);
+        return {
+          name: item.category,
+          value,
+          percent: total > 0 ? (value / total) * 100 : 0,
+        };
+      }) ?? []
+    );
+  }, [structure, total]);
 
-  const chartData =
-    data?.items.map((item) => ({
-      name: item.category,
-      value: toNumber(item.total_net),
-    })) ?? [];
+  function handleSliceClick(_: unknown, index: number) {
+    const category = chartData[index]?.name;
+    if (!category || !onAnalyzeCategory) return;
+    onAnalyzeCategory(category);
+  }
 
   return (
     <DashboardCard title={labels.structureTitle} subtitle={labels.structureSubtitle}>
@@ -65,16 +88,26 @@ export function CostStructureChart({
           <HydrationSafeIcon icon={Loader2} className="mr-2 h-5 w-5 animate-spin" />
           Ładowanie…
         </div>
-      ) : error ? (
-        <p className="text-sm text-red-600">{error}</p>
       ) : chartData.length === 0 ? (
         <EmptyDataHint />
       ) : (
         <>
-          <p className="mb-4 text-2xl font-bold text-slate-900 dark:text-white">
-            {formatPln(data!.total_net)}
-            <span className="ml-2 text-sm font-normal text-slate-500">łącznie netto</span>
-          </p>
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <p className="text-2xl font-bold text-slate-900 dark:text-white">
+              {formatPln(total)}
+              <span className="ml-2 text-sm font-normal text-slate-500">łącznie netto</span>
+            </p>
+            {onAnalyzeCategory ? (
+              <button
+                type="button"
+                onClick={() => onAnalyzeCategory()}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                <HydrationSafeIcon icon={LineChart} className="h-4 w-4" />
+                Analizuj kategorię
+              </button>
+            ) : null}
+          </div>
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
               <Pie
@@ -83,31 +116,51 @@ export function CostStructureChart({
                 nameKey="name"
                 cx="50%"
                 cy="50%"
-                innerRadius={60}
-                outerRadius={100}
+                innerRadius="42%"
+                outerRadius="72%"
                 paddingAngle={2}
+                onClick={handleSliceClick}
+                style={{ cursor: onAnalyzeCategory ? "pointer" : "default" }}
               >
-                {chartData.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                {chartData.map((item, index) => (
+                  <Cell
+                    key={item.name}
+                    fill={CHART_DONUT_COLORS[index % CHART_DONUT_COLORS.length]}
+                  />
                 ))}
               </Pie>
-              <Tooltip
-                formatter={(value) => formatPln(value as number)}
-                contentStyle={{ borderRadius: "8px", fontSize: "13px" }}
-              />
+              <Tooltip content={<StructureTooltip />} />
             </PieChart>
           </ResponsiveContainer>
-          <ul className="mt-4 space-y-2">
+          <p className="mt-2 text-xs text-slate-400">
+            Kliknij wycinek wykresu, aby otworzyć analizę wybranej kategorii.
+          </p>
+          <ul className="mt-4 max-h-48 space-y-2 overflow-y-auto">
             {chartData.map((item, index) => (
-              <li key={item.name} className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2">
-                  <span
-                    className="inline-block h-3 w-3 rounded-full"
-                    style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                  />
-                  <span className="max-w-[200px] truncate">{item.name}</span>
-                </span>
-                <span className="font-medium">{formatPln(item.value)}</span>
+              <li key={item.name}>
+                <button
+                  type="button"
+                  onClick={() => onAnalyzeCategory?.(item.name)}
+                  className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      className="inline-block h-3 w-3 shrink-0 rounded-full"
+                      style={{
+                        backgroundColor: CHART_DONUT_COLORS[index % CHART_DONUT_COLORS.length],
+                      }}
+                    />
+                    <span className="truncate">{item.name}</span>
+                  </span>
+                  <span className="ml-2 shrink-0 text-right">
+                    <span className="font-medium text-slate-900 dark:text-white">
+                      {formatPln(item.value)}
+                    </span>
+                    <span className="ml-2 text-xs text-slate-500">
+                      {formatPercent(item.value, total)}
+                    </span>
+                  </span>
+                </button>
               </li>
             ))}
           </ul>

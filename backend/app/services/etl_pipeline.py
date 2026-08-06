@@ -8,9 +8,8 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
-from types import SimpleNamespace
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -18,9 +17,11 @@ from app.database.models import Invoice, InvoiceLine
 from app.database.session import async_session_factory, set_tenant_context
 from app.services.ai.categorizer import ProductCategorizer
 from app.services.ai.exceptions import AICategorizationError
-from app.services.invoice_roles import resolve_contractor_name
+from app.services.invoice_roles import resolve_contractor_name, resolve_contractor_nip
+from app.services.invoice_primary_category import update_invoice_primary_category
 from app.services.tenant_categories import resolve_tenant_categories
 from app.services.xml.fa3_parser import Fa3XmlParserError, parse_fa3_xml
+from app.services.xml.models import Fa3InvoiceLine
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,12 @@ class InvoiceEtlPipeline:
             parsed.header.buyer_name,
         )
 
+        contractor_nip = resolve_contractor_nip(
+            invoice_role,
+            parsed.header.seller_nip,
+            parsed.header.buyer_nip,
+        )
+
         if ksef_number:
             existing = (
                 await session.execute(
@@ -114,28 +121,51 @@ class InvoiceEtlPipeline:
                 )
             ).scalar_one_or_none()
             if existing is not None:
-                if existing.invoice_role != invoice_role:
-                    existing.invoice_role = invoice_role
-                if contractor_name and not existing.contractor_name:
-                    existing.contractor_name = contractor_name
-                if parsed.header.total_net is not None and existing.total_net is None:
-                    existing.total_net = parsed.header.total_net
-                if parsed.header.total_vat is not None and existing.total_vat is None:
-                    existing.total_vat = parsed.header.total_vat
-                if parsed.header.total_gross is not None and existing.total_gross is None:
-                    existing.total_gross = parsed.header.total_gross
+                self._merge_invoice_header(existing, parsed, invoice_role, contractor_name)
                 await session.flush()
-                line_count = (
+                existing_line_count = (
                     await session.execute(
                         select(func.count())
                         .select_from(InvoiceLine)
                         .where(InvoiceLine.invoice_id == existing.id)
                     )
                 ).scalar_one()
+                parsed_line_count = len(parsed.lines)
+                if parsed_line_count != existing_line_count:
+                    logger.info(
+                        "Ponowne przetwarzanie faktury %s: %s linii XML vs %s w bazie",
+                        ksef_number,
+                        parsed_line_count,
+                        existing_line_count,
+                    )
+                    line_entities = await self._build_classified_lines(
+                        session,
+                        tenant_id,
+                        existing.id,
+                        parsed.lines,
+                        contractor_nip,
+                        allowed_categories,
+                    )
+                    await session.execute(
+                        delete(InvoiceLine).where(
+                            InvoiceLine.invoice_id == existing.id,
+                            InvoiceLine.tenant_id == tenant_id,
+                        )
+                    )
+                    for entity in line_entities:
+                        session.add(entity)
+                    update_invoice_primary_category(existing, line_entities)
+                    await session.flush()
+                    return EtlProcessResult(
+                        tenant_id=tenant_id,
+                        invoice_id=existing.id,
+                        lines_processed=len(line_entities),
+                        categories_used=allowed_categories,
+                    )
                 return EtlProcessResult(
                     tenant_id=tenant_id,
                     invoice_id=existing.id,
-                    lines_processed=line_count,
+                    lines_processed=existing_line_count,
                     categories_used=allowed_categories,
                 )
 
@@ -158,24 +188,18 @@ class InvoiceEtlPipeline:
         session.add(invoice)
         await session.flush()
 
-        for line in parsed.lines:
-            classification = await self._classify_line(line.product_name, allowed_categories)
-            session.add(
-                InvoiceLine(
-                    id=uuid.uuid4(),
-                    tenant_id=tenant_id,
-                    invoice_id=invoice.id,
-                    line_number=line.line_number,
-                    product_name=line.product_name,
-                    quantity=line.quantity,
-                    unit_price=line.unit_price,
-                    line_net_value=line.line_net_value,
-                    ai_category_main=classification.kategoria_glowna,
-                    ai_category_sub=classification.kategoria_podrzedna,
-                    ai_confidence=classification.pewnosc_klasyfikacji,
-                )
-            )
+        line_entities = await self._build_classified_lines(
+            session,
+            tenant_id,
+            invoice.id,
+            parsed.lines,
+            contractor_nip,
+            allowed_categories,
+        )
+        for entity in line_entities:
+            session.add(entity)
 
+        update_invoice_primary_category(invoice, line_entities)
         await session.flush()
         return EtlProcessResult(
             tenant_id=tenant_id,
@@ -184,8 +208,74 @@ class InvoiceEtlPipeline:
             categories_used=allowed_categories,
         )
 
+    @staticmethod
+    def _merge_invoice_header(
+        invoice: Invoice,
+        parsed,
+        invoice_role: str,
+        contractor_name: str | None,
+    ) -> None:
+        if invoice.invoice_role != invoice_role:
+            invoice.invoice_role = invoice_role
+        if contractor_name and not invoice.contractor_name:
+            invoice.contractor_name = contractor_name
+        if parsed.header.total_net is not None and invoice.total_net is None:
+            invoice.total_net = parsed.header.total_net
+        if parsed.header.total_vat is not None and invoice.total_vat is None:
+            invoice.total_vat = parsed.header.total_vat
+        if parsed.header.total_gross is not None and invoice.total_gross is None:
+            invoice.total_gross = parsed.header.total_gross
+
+    async def _build_classified_lines(
+        self,
+        session: AsyncSession,
+        tenant_id: uuid.UUID,
+        invoice_id: uuid.UUID,
+        lines: list[Fa3InvoiceLine],
+        contractor_nip: str,
+        allowed_categories: list[str],
+    ) -> list[InvoiceLine]:
+        concurrency = max(1, get_settings().etl_classification_concurrency)
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def classify_one(line: Fa3InvoiceLine):
+            async with semaphore:
+                classification = await self._classify_line(
+                    session,
+                    tenant_id,
+                    contractor_nip,
+                    line.product_name,
+                    allowed_categories,
+                )
+                return line, classification
+
+        results = await asyncio.gather(*(classify_one(line) for line in lines))
+
+        entities: list[InvoiceLine] = []
+        for line, classification in results:
+            entities.append(
+                InvoiceLine(
+                    id=uuid.uuid4(),
+                    tenant_id=tenant_id,
+                    invoice_id=invoice_id,
+                    line_number=line.line_number,
+                    product_name=line.product_name,
+                    quantity=line.quantity,
+                    unit_price=line.unit_price,
+                    line_net_value=line.line_net_value,
+                    ai_category_main=classification.kategoria_glowna,
+                    ai_category_sub=classification.kategoria_podrzedna,
+                    ai_confidence=classification.pewnosc_klasyfikacji,
+                    category_source=classification.source,
+                )
+            )
+        return entities
+
     async def _classify_line(
         self,
+        session: AsyncSession,
+        tenant_id: uuid.UUID,
+        contractor_nip: str,
         product_name: str,
         allowed_categories: list[str],
     ):
@@ -195,6 +285,9 @@ class InvoiceEtlPipeline:
                 self._categorizer.classify_product_name(
                     product_name,
                     allowed_categories=allowed_categories,
+                    session=session,
+                    tenant_id=tenant_id,
+                    contractor_nip=contractor_nip,
                 ),
                 timeout=timeout,
             )
@@ -208,10 +301,12 @@ class InvoiceEtlPipeline:
             return self._fallback_classification(allowed_categories)
 
     @staticmethod
-    def _fallback_classification(allowed_categories: list[str]):
-        main = allowed_categories[0] if allowed_categories else "Niesklasyfikowane"
-        return SimpleNamespace(
-            kategoria_glowna=main,
-            kategoria_podrzedna="Inne",
+    def _fallback_classification(_allowed_categories: list[str]):
+        from app.services.ai.classification_result import ClassificationResult
+
+        return ClassificationResult(
+            kategoria_glowna=None,
+            kategoria_podrzedna=None,
             pewnosc_klasyfikacji=0,
+            source="fallback",
         )

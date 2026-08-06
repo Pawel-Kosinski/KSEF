@@ -1,47 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Building2, Loader2, UserRound } from "lucide-react";
 
 import { DashboardCard } from "@/components/DashboardCard";
 import { HydrationSafeIcon } from "@/components/HydrationSafeIcon";
 import { EmptyDataHint } from "@/components/EmptyDataHint";
-import { apiFetch, formatPln, toNumber } from "@/lib/api";
+import { formatPln, toNumber } from "@/lib/api";
 import type { InvoiceRole, TopCounterpartiesResponse } from "@/lib/types";
 import { ROLE_LABELS } from "@/lib/types";
 
 interface TopCounterpartiesListProps {
   role: InvoiceRole;
-  refreshKey?: number;
-  dateFrom?: string;
-  dateTo?: string;
+  topCounterparties: TopCounterpartiesResponse | null;
+  loading?: boolean;
 }
 
 export function TopCounterpartiesList({
   role,
-  refreshKey = 0,
-  dateFrom,
-  dateTo,
+  topCounterparties,
+  loading = false,
 }: TopCounterpartiesListProps) {
-  const [data, setData] = useState<TopCounterpartiesResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const labels = ROLE_LABELS[role];
   const Icon = role === "sales" ? UserRound : Building2;
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    apiFetch<TopCounterpartiesResponse>("/stats/top-counterparties", {
-      role,
-      limit: 5,
-      date_from: dateFrom,
-      date_to: dateTo,
-    })
-      .then(setData)
-      .catch((err) => setError(err instanceof Error ? err.message : "Błąd"))
-      .finally(() => setLoading(false));
-  }, [role, refreshKey, dateFrom, dateTo]);
+  const items = topCounterparties?.items ?? [];
 
   return (
     <DashboardCard title={labels.counterpartiesTitle} subtitle={labels.counterpartiesSubtitle}>
@@ -50,17 +31,15 @@ export function TopCounterpartiesList({
           <HydrationSafeIcon icon={Loader2} className="mr-2 h-5 w-5 animate-spin" />
           Ładowanie…
         </div>
-      ) : error ? (
-        <p className="text-sm text-red-600">{error}</p>
-      ) : !data?.items.length ? (
+      ) : items.length === 0 ? (
         <EmptyDataHint />
       ) : (
         <ol className="space-y-3">
-          {data.items.map((party) => {
+          {items.map((party) => {
             const share =
-              toNumber(data.items[0].total_net) > 0
+              toNumber(items[0].total_net) > 0
                 ? (toNumber(party.total_net) /
-                    data.items.reduce((sum, v) => sum + toNumber(v.total_net), 0)) *
+                    items.reduce((sum, v) => sum + toNumber(v.total_net), 0)) *
                   100
                 : 0;
 

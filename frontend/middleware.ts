@@ -2,8 +2,22 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth";
+import { isJwtExpired } from "@/lib/jwt";
 
 const PUBLIC_PATHS = ["/login", "/register"];
+
+function redirectToLogin(request: NextRequest, clearCookie: boolean) {
+  const loginUrl = new URL("/login", request.url);
+  const { pathname } = request.nextUrl;
+  if (pathname !== "/") {
+    loginUrl.searchParams.set("from", pathname);
+  }
+  const response = NextResponse.redirect(loginUrl);
+  if (clearCookie) {
+    response.cookies.delete(ACCESS_TOKEN_COOKIE);
+  }
+  return response;
+}
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -22,18 +36,14 @@ export function middleware(request: NextRequest) {
   );
 
   if (isPublic) {
-    if (token && (pathname === "/login" || pathname === "/register")) {
+    if (token && !isJwtExpired(token) && (pathname === "/login" || pathname === "/register")) {
       return NextResponse.redirect(new URL("/", request.url));
     }
     return NextResponse.next();
   }
 
-  if (!token) {
-    const loginUrl = new URL("/login", request.url);
-    if (pathname !== "/") {
-      loginUrl.searchParams.set("from", pathname);
-    }
-    return NextResponse.redirect(loginUrl);
+  if (!token || isJwtExpired(token)) {
+    return redirectToLogin(request, Boolean(token));
   }
 
   return NextResponse.next();

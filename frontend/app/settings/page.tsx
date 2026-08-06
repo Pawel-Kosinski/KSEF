@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, BarChart3, CheckCircle2, Loader2 } from "lucide-react";
 
+import { SettingsNav } from "@/components/SettingsNav";
 import { HydrationSafeIcon } from "@/components/HydrationSafeIcon";
 import { parseApiErrorMessage } from "@/lib/apiErrors";
 import { apiFetch } from "@/lib/api";
@@ -75,7 +76,7 @@ export default function SettingsPage() {
                 Ustawienia
               </h1>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Konfiguracja integracji z KSeF
+                Konfiguracja integracji i kategorii
               </p>
             </div>
           </div>
@@ -90,6 +91,23 @@ export default function SettingsPage() {
       </header>
 
       <main className="mx-auto max-w-3xl px-6 py-8">
+        <SettingsNav />
+
+        <section className="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            Kategorie finansowe
+          </h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Edytuj nazwy, dodawaj własne kategorie i usuwaj nieużywane pozycje.
+          </p>
+          <Link
+            href="/settings/categories"
+            className="mt-4 inline-flex rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Zarządzaj kategoriami
+          </Link>
+        </section>
+
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Połączenie z KSeF

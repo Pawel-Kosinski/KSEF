@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { FileText, Loader2 } from "lucide-react";
 
+import { CategorySourceIcon } from "@/components/CategorySourceIcon";
 import { DashboardCard } from "@/components/DashboardCard";
 import { HydrationSafeIcon } from "@/components/HydrationSafeIcon";
-import { apiFetch, formatPln } from "@/lib/api";
+import { useApiQuery } from "@/hooks/useApiQuery";
+import { formatPln } from "@/lib/api";
+import { invoiceDetailUrl } from "@/lib/dashboard";
 import type { InvoiceListItem, InvoiceRole } from "@/lib/types";
 import { ROLE_LABELS } from "@/lib/types";
 
@@ -15,6 +17,7 @@ interface InvoiceListProps {
   refreshKey?: number;
   dateFrom?: string;
   dateTo?: string;
+  categoryFilter?: string | null;
 }
 
 export function InvoiceList({
@@ -22,30 +25,30 @@ export function InvoiceList({
   refreshKey = 0,
   dateFrom,
   dateTo,
+  categoryFilter = null,
 }: InvoiceListProps) {
-  const [items, setItems] = useState<InvoiceListItem[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const labels = ROLE_LABELS[role];
 
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    apiFetch<InvoiceListItem[]>("/invoices", {
+  const { data: items, error, loading } = useApiQuery<InvoiceListItem[]>(
+    "/invoices",
+    {
       role,
       limit: 50,
       date_from: dateFrom,
       date_to: dateTo,
-    })
-      .then(setItems)
-      .catch((err) => setError(err instanceof Error ? err.message : "Błąd"))
-      .finally(() => setLoading(false));
-  }, [role, refreshKey, dateFrom, dateTo]);
+      category: categoryFilter ?? undefined,
+    },
+    [role, refreshKey, dateFrom, dateTo, categoryFilter],
+  );
+
+  const subtitle = categoryFilter
+    ? `Filtrowane wg kategorii: ${categoryFilter}`
+    : "Kliknij fakturę, aby zobaczyć pozycje i przypisać kategorię do każdej z nich";
 
   return (
     <DashboardCard
       title={labels.invoicesTitle}
-      subtitle="Kliknij fakturę, aby zobaczyć pozycje i kategoryzację AI"
+      subtitle={subtitle}
       className="col-span-full"
     >
       {loading ? (
@@ -55,9 +58,11 @@ export function InvoiceList({
         </div>
       ) : error ? (
         <p className="text-sm text-red-600">{error}</p>
-      ) : items.length === 0 ? (
+      ) : !items?.length ? (
         <p className="text-sm text-slate-500">
-          Brak faktur w tej kategorii. Kliknij „Pobierz z KSeF” u góry panelu.
+          {categoryFilter
+            ? "Brak faktur w wybranej kategorii w tym okresie."
+            : "Brak faktur w tej kategorii. Kliknij „Pobierz z KSeF” u góry panelu."}
         </p>
       ) : (
         <div className="overflow-x-auto">
@@ -68,13 +73,14 @@ export function InvoiceList({
                 <th className="pb-3 pr-4 font-medium">Nr KSeF</th>
                 <th className="pb-3 pr-4 font-medium">Data</th>
                 <th className="pb-3 pr-4 font-medium">Kontrahent</th>
+                <th className="pb-3 pr-4 font-medium">Kategoria</th>
                 <th className="pb-3 pr-4 font-medium">Pozycje</th>
                 <th className="pb-3 pr-4 font-medium text-right">Netto</th>
                 <th className="pb-3 font-medium" />
               </tr>
             </thead>
             <tbody>
-              {items.map((invoice) => {
+              {items?.map((invoice) => {
                 const counterpartyNip =
                   role === "sales" ? invoice.buyer_nip : invoice.seller_nip;
                 return (
@@ -97,6 +103,14 @@ export function InvoiceList({
                       </div>
                       <div className="text-xs text-slate-400">NIP {counterpartyNip}</div>
                     </td>
+                    <td className="py-3 pr-4">
+                      <div className="flex items-center gap-1.5">
+                        <CategorySourceIcon source={invoice.primary_category_source} />
+                        <span className="text-slate-600 dark:text-slate-300">
+                          {invoice.primary_category_main ?? "—"}
+                        </span>
+                      </div>
+                    </td>
                     <td className="py-3 pr-4 text-slate-600 dark:text-slate-300">
                       {invoice.line_count}
                     </td>
@@ -105,11 +119,11 @@ export function InvoiceList({
                     </td>
                     <td className="py-3">
                       <Link
-                        href={`/invoices/${invoice.id}`}
+                        href={invoiceDetailUrl(invoice.id, role)}
                         className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
                       >
                         <HydrationSafeIcon icon={FileText} className="h-4 w-4" />
-                        Szczegóły
+                        Pozycje
                       </Link>
                     </td>
                   </tr>

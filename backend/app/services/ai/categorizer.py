@@ -1,39 +1,43 @@
 """
-Serwis kategoryzacji wydatków – Ollama + dynamiczne Structured Outputs per tenant.
+Serwis kategoryzacji wydatków – reguły kontrahentów + Ollama (Structured Output).
 
-Wywołania Ollama (GPU inference) są delegowane do puli wątków via asyncio.to_thread(),
-aby nie blokować event loopa FastAPI.
+Kolejność: reguła NIP → LLM → fallback.
 """
 
 import asyncio
 import json
 import re
+import uuid
 from typing import Any
 
 from ollama import Client
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
+from app.services.ai.classification_result import ClassificationResult
 from app.services.ai.exceptions import AIInputIsolationError, AICategorizationError
 from app.services.ai.schemas import (
     build_category_json_schema,
     build_category_schema,
-    get_category_literal_values,
     validate_allowed_categories,
 )
+from app.services.contractor_rules import get_contractor_rule
 
 _SYSTEM_PROMPT_TEMPLATE = """\
 Jesteś precyzyjnym silnikiem kategoryzującym dla systemu finansowego MŚP ("Wirtualny CFO").
-Twoim wyłącznym zadaniem jest analiza pojedynczych, surowych nazw towarów lub usług \
-pobranych z polskich faktur kosztowych i przypisanie ich do właściwych węzłów z dostępnego \
-drzewa kategorii.
-Dostępne kategorie główne (wybierz dokładnie jedną – nie wolno używać innych nazw):
-{categories_block}
-Pole kategoria_podrzedna: maksymalnie 3 słowa po polsku.
-Skoncentruj się na znaczeniu słów, wykrywaj typowy polski żargon księgowy i skróty \
-(np. "ON" to Olej Napędowy, "F-vat" to prowizja itp.).
-Jesteś zintegrowany maszynowo, więc twoja odpowiedź to zawsze i wyłącznie czysty JSON, \
-bez wstępów, tłumaczeń ani znaczników Markdown.\
+Analizujesz wyłącznie nazwę towaru lub usługi (pole P_7) z polskiej faktury kosztowej.
+
+Dozwolone kategorie główne (JSON):
+{categories_json}
+
+Musisz wybrać JEDNĄ kategorię główną z podanej listy. Nie wolno ci wymyślać własnych nazw.
+Pole kategoria_podrzedna: maksymalnie 3 słowa po polsku (np. "Olej napędowy", "Hosting www").
+
+Odpowiedź to wyłącznie poprawny JSON (bez Markdown), np.:
+{{"kategoria_glowna": "{example_category}", "kategoria_podrzedna": "Przykład", "pewnosc_klasyfikacji": 92}}
+
+Skoncentruj się na znaczeniu słów i polskim żargonie księgowym (np. "ON" = olej napędowy).\
 """
 
 _NIP_PATTERN = re.compile(r"\b\d{10}\b")
@@ -51,8 +55,12 @@ _SUBCATEGORY_CLEANUP = re.compile(r"[^\w\sąćęłńóśźżĄĆĘŁŃÓŚŹŻ.-
 
 def build_system_prompt(allowed_categories: list[str]) -> str:
     categories = validate_allowed_categories(allowed_categories)
-    categories_block = "\n".join(f"- {name}" for name in categories)
-    return _SYSTEM_PROMPT_TEMPLATE.format(categories_block=categories_block)
+    categories_json = json.dumps(categories, ensure_ascii=False)
+    example_category = categories[0]
+    return _SYSTEM_PROMPT_TEMPLATE.format(
+        categories_json=categories_json,
+        example_category=example_category,
+    )
 
 
 def _normalize_main_category(value: str, allowed_categories: list[str]) -> str:
@@ -69,19 +77,18 @@ def _normalize_main_category(value: str, allowed_categories: list[str]) -> str:
 
 
 def _sanitize_model_payload(data: dict, allowed_categories: list[str]) -> dict:
-    sub = str(data.get("kategoria_podrzedna", ""))
+    sub = str(data.get("kategoria_podrzedna", data.get("category_sub", "")))
     sub = re.split(r"['\"{}\[\]<>\\]", sub)[0]
     sub = _SUBCATEGORY_CLEANUP.sub("", sub).strip()
     words = sub.split()[:3]
     data["kategoria_podrzedna"] = " ".join(words) if words else "Inne"
 
-    data["kategoria_glowna"] = _normalize_main_category(
-        str(data.get("kategoria_glowna", "")),
-        allowed_categories,
-    )
+    main_raw = data.get("kategoria_glowna", data.get("category", ""))
+    data["kategoria_glowna"] = _normalize_main_category(str(main_raw), allowed_categories)
 
+    confidence_raw = data.get("pewnosc_klasyfikacji", data.get("confidence", 50))
     try:
-        confidence = int(data.get("pewnosc_klasyfikacji", 50))
+        confidence = int(float(confidence_raw) * 100) if float(confidence_raw) <= 1 else int(confidence_raw)
     except (TypeError, ValueError):
         confidence = 50
     data["pewnosc_klasyfikacji"] = max(0, min(100, confidence))
@@ -129,7 +136,6 @@ def _ollama_chat_sync(
     messages: list[dict[str, str]],
     json_schema: dict[str, Any],
 ) -> str:
-    """Synchroniczne wywołanie Ollama – uruchamiane w asyncio.to_thread()."""
     client = Client(host=host)
     response = client.chat(
         model=model,
@@ -144,7 +150,7 @@ def _ollama_chat_sync(
 
 
 class ProductCategorizer:
-    """Klient Ollama – kategorie definiowane per tenant; inference w puli wątków."""
+    """Hybrydowy kategoryzator: reguły NIP + Ollama Structured Output."""
 
     def __init__(
         self,
@@ -162,22 +168,48 @@ class ProductCategorizer:
         self,
         product_name: str,
         allowed_categories: list[str],
-    ) -> BaseModel:
-        """
-        Kategoryzuje nazwę towaru/usługi (P_7) względem drzewa kategorii tenanta.
-
-        Do modelu trafia wyłącznie product_name – bez NIP, kwot ani metadanych faktury.
-        """
+        *,
+        session: AsyncSession | None = None,
+        tenant_id: uuid.UUID | None = None,
+        contractor_nip: str | None = None,
+    ) -> ClassificationResult:
         categories = validate_allowed_categories(allowed_categories)
+
+        if session is not None and tenant_id is not None and contractor_nip:
+            rule = await get_contractor_rule(session, tenant_id, contractor_nip)
+            if rule is not None and rule.category_main in categories:
+                return ClassificationResult(
+                    kategoria_glowna=rule.category_main,
+                    kategoria_podrzedna=rule.category_sub or "Inne",
+                    pewnosc_klasyfikacji=100,
+                    source="rule",
+                )
+
+        ai_result = await self._classify_with_ai(product_name, categories)
+        return ClassificationResult(
+            kategoria_glowna=ai_result.kategoria_glowna,
+            kategoria_podrzedna=ai_result.kategoria_podrzedna,
+            pewnosc_klasyfikacji=ai_result.pewnosc_klasyfikacji,
+            source="ai",
+        )
+
+    async def _classify_with_ai(
+        self,
+        product_name: str,
+        allowed_categories: list[str],
+    ) -> BaseModel:
         safe_name = _assert_product_name_isolation(product_name)
-        schema_cls = build_category_schema(categories)
-        json_schema = build_category_json_schema(categories)
-        system_prompt = build_system_prompt(categories)
+        schema_cls = build_category_schema(allowed_categories)
+        json_schema = build_category_json_schema(allowed_categories)
+        system_prompt = build_system_prompt(allowed_categories)
         messages = [
             {"role": "system", "content": system_prompt},
             {
                 "role": "user",
-                "content": f"Sklasyfikuj następującą pozycję z faktury: {safe_name}",
+                "content": (
+                    f"Sklasyfikuj pozycję faktury. Zwróć JSON zgodny ze schematem.\n"
+                    f"Pozycja: {safe_name}"
+                ),
             },
         ]
 
@@ -208,7 +240,7 @@ class ProductCategorizer:
             raise AICategorizationError("Ollama zwróciła pustą odpowiedź")
 
         try:
-            return _parse_category_response(content, schema_cls, categories)
+            return _parse_category_response(content, schema_cls, allowed_categories)
         except AICategorizationError:
             raise
         except Exception as exc:
@@ -223,4 +255,9 @@ async def classify_product_name(
 ) -> dict[str, Any]:
     categorizer = ProductCategorizer()
     result = await categorizer.classify_product_name(product_name, allowed_categories)
-    return result.model_dump()
+    return {
+        "kategoria_glowna": result.kategoria_glowna,
+        "kategoria_podrzedna": result.kategoria_podrzedna,
+        "pewnosc_klasyfikacji": result.pewnosc_klasyfikacji,
+        "source": result.source,
+    }

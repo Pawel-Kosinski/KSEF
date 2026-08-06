@@ -167,17 +167,22 @@ async def test_sync_invoices_processes_xml_from_mocked_export(db_session):
     )
 
     mock_categorizer = MagicMock()
-    from pydantic import BaseModel, Field
-
-    class _FakeCat(BaseModel):
-        kategoria_glowna: str
-        kategoria_podrzedna: str = "test"
-        pewnosc_klasyfikacji: int = Field(default=90, ge=0, le=100)
+    from app.services.ai.classification_result import ClassificationResult
 
     mock_categorizer.classify_product_name = AsyncMock(
         side_effect=[
-            _FakeCat(kategoria_glowna="Materiały i Surowce"),
-            _FakeCat(kategoria_glowna="Paliwa i Transport"),
+            ClassificationResult(
+                kategoria_glowna="Materiały i Surowce",
+                kategoria_podrzedna="test",
+                pewnosc_klasyfikacji=90,
+                source="ai",
+            ),
+            ClassificationResult(
+                kategoria_glowna="Paliwa i Transport",
+                kategoria_podrzedna="test",
+                pewnosc_klasyfikacji=90,
+                source="ai",
+            ),
         ]
     )
 

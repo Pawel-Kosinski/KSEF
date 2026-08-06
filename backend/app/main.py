@@ -1,16 +1,13 @@
 from contextlib import asynccontextmanager
-from uuid import UUID
 
-from fastapi import Depends, FastAPI
+import httpx
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 
 from app.api.v1.router import api_router
 from app.config import get_settings
-from app.database.models import InvoiceLine
-from app.dependencies.tenant import TenantContext, get_current_tenant, get_rls_session
+from app.database.session import async_session_factory
 
 settings = get_settings()
 
@@ -42,33 +39,30 @@ app.add_middleware(
 app.include_router(api_router)
 
 
-class InvoiceLineRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    invoice_id: UUID
-    line_number: int
-    product_name: str
-    quantity: float
-    unit_price: float
-    line_net_value: float
-    ai_category_main: str | None = None
-    ai_category_sub: str | None = None
-    ai_confidence: int | None = None
+async def _check_ollama() -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            response = await client.get(f"{settings.ollama_host.rstrip('/')}/api/tags")
+            return response.status_code == 200
+    except Exception:
+        return False
 
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "app": settings.app_name}
+    database_ok = False
+    try:
+        async with async_session_factory() as session:
+            await session.execute(text("SELECT 1"))
+            database_ok = True
+    except Exception:
+        database_ok = False
 
+    ollama_ok = await _check_ollama()
 
-@app.get("/api/v1/invoice-lines", response_model=list[InvoiceLineRead])
-async def list_invoice_lines(
-    tenant: TenantContext = Depends(get_current_tenant),
-    session: AsyncSession = Depends(get_rls_session),
-):
-    """Lista wierszy faktur – filtrowana przez RLS na poziomie PostgreSQL."""
-    result = await session.execute(
-        select(InvoiceLine).order_by(InvoiceLine.created_at.desc()).limit(100)
-    )
-    return result.scalars().all()
+    return {
+        "status": "ok" if database_ok else "degraded",
+        "app": settings.app_name,
+        "database": database_ok,
+        "ollama": ollama_ok,
+    }

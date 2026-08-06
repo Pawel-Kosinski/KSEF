@@ -38,6 +38,26 @@ class TrendResponse(BaseModel):
     date_from: date | None = None
     date_to: date | None = None
     role: str | None = None
+    category: str | None = None
+
+
+class CashflowItem(BaseModel):
+    """Pojedynczy punkt wykresu cashflow (przychody vs koszty)."""
+
+    date: str = Field(description="Okres: YYYY-MM-DD, YYYY-Www lub YYYY-MM")
+    sales: Decimal = Field(description="Suma przychodów netto (invoice_role=sales)")
+    costs: Decimal = Field(description="Suma kosztów netto (invoice_role=cost)")
+    balance: Decimal = Field(description="Saldo: sales - costs")
+
+
+class CashflowResponse(BaseModel):
+    items: list[CashflowItem]
+    total_sales: Decimal
+    total_costs: Decimal
+    total_balance: Decimal
+    granularity: TrendGranularity = "month"
+    date_from: date | None = None
+    date_to: date | None = None
 
 
 class TopCounterpartyItem(BaseModel):
@@ -63,3 +83,14 @@ class SummaryResponse(BaseModel):
     date_from: date | None = None
     date_to: date | None = None
     role: str | None = None
+
+
+class DashboardResponse(BaseModel):
+    """Zagregowane dane dashboardu – jedno żądanie zamiast wielu."""
+
+    summary: SummaryResponse
+    trend: TrendResponse
+    previous_trend: TrendResponse | None = None
+    cost_structure: CostStructureResponse
+    cashflow: CashflowResponse
+    top_counterparties: TopCounterpartiesResponse

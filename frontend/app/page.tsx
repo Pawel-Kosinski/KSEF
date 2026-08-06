@@ -1,5 +1,11 @@
+import { Suspense } from "react";
+
 import { DashboardView } from "@/components/DashboardView";
 
 export default function DashboardPage() {
-  return <DashboardView />;
+  return (
+    <Suspense fallback={null}>
+      <DashboardView />
+    </Suspense>
+  );
 }

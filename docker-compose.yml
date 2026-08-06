@@ -16,5 +16,22 @@ services:
       timeout: 5s
       retries: 5
 
+  # Opcjonalnie: docker compose --profile ai up -d
+  ollama:
+    profiles: ["ai"]
+    image: ollama/ollama:latest
+    container_name: vcfo-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - vcfo_ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
 volumes:
   vcfo_pgdata:
+  vcfo_ollama:

@@ -4,32 +4,25 @@ Platforma B2B do analizy faktur KSeF API 2.0 z lokalnym AI (Ollama) i PostgreSQL
 
 ## Repozytorium (monorepo)
 
-Jeden repozytorium Git w katalogu `KSEF/`:
-
 ```
-KSEF/                 ← root repozytorium (otwórz ten folder w IDE)
+KSEF/
 ├── backend/          # FastAPI
-├── frontend/         # Next.js
+├── frontend/         # Next.js (proxy + cookie auth)
 ├── docker-compose.yml
 └── docs/
 ```
 
-**Nie** inicjalizuj osobnego `git init` w `frontend/` — to powoduje dwa repozytoria w VS Code/Cursor.
-
-```bash
-git clone <url-repozytorium>
-cd KSEF
-docker compose up -d
-```
-
-**Nie commituj:** plików `.env`, `.env.local`, tokenów KSeF, JWT produkcyjnych. W repozytarium są tylko szablony `*.example`.
+**Nie commituj:** `.env`, `.env.local`, tokenów KSeF, kluczy produkcyjnych. W repozytorium są tylko szablony `*.example`.
 
 ## Szybki start
 
-### 1. Uruchom PostgreSQL
+### 1. PostgreSQL (+ opcjonalnie Ollama)
 
 ```bash
 docker compose up -d
+# AI lokalnie (kategoryzacja):
+docker compose --profile ai up -d
+docker exec -it vcfo-ollama ollama pull qwen2.5:7b
 ```
 
 ### 2. Backend
@@ -40,74 +33,93 @@ python -m venv .venv
 .venv\Scripts\activate        # Windows
 pip install -r requirements.txt
 copy .env.example .env
-# Edytuj .env – ustaw KSEF_TOKEN z MCU KSeF (nie commituj .env)
+```
+
+W `.env` ustaw minimum:
+
+- `DATABASE_URL` – domyślnie wskazuje na Docker Postgres
+- `ENCRYPTION_MASTER_KEY` – wymagany do zapisu tokenu KSeF w ustawieniach:
+
+```powershell
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+```bash
 alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
-### 3. Test API
+Na Windows, jeśli port 8000 jest zajęty przez stare procesy:
 
-- `GET http://localhost:8000/health` – health check
-- `GET http://localhost:8000/api/v1/invoice-lines` – wymaga `Authorization: Bearer <JWT z tenant_id>`
-
-### 4. Testy modułów (konsola)
-
-```bash
-python scripts/test_parse_fa3_xml.py
-python scripts/test_ksef_auth.py
-python scripts/test_ai_categorization.py
-python scripts/test_etl_pipeline.py   # wymaga: alembic upgrade head + Ollama
-pytest tests/ -v
+```powershell
+.\scripts\dev-backend.ps1
 ```
 
-## Frontend (Faza 4 – Dashboard)
+### 3. Frontend
 
 ```bash
 cd frontend
 copy .env.local.example .env.local
-# Wklej token JWT do NEXT_PUBLIC_DEV_TOKEN (patrz niżej)
 npm install
 npm run dev
 ```
 
 Dashboard: [http://localhost:3000](http://localhost:3000)
 
-### Token deweloperski
+Logowanie przez formularz `/login` – sesja w **httpOnly cookie** (`access_token`).  
+Frontend woła backend przez proxy Next.js (`/api/v1/*` → `BACKEND_API_URL`), nie bezpośrednio z przeglądarki.
 
-```powershell
-cd backend
-.venv\Scripts\python scripts\create_dev_token.py
-```
-
-Skopiuj wygenerowany `token` do `frontend/.env.local`:
+`frontend/.env.local`:
 
 ```env
-NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000/api/v1
-NEXT_PUBLIC_DEV_TOKEN=<token z powyższego polecenia>
+BACKEND_API_URL=http://127.0.0.1:8000
 ```
 
-> Token musi zawierać `tenant_id` z danymi testowymi w bazie (np. po `test_etl_pipeline.py`).
+### 4. Rejestracja i KSeF
 
-### Stack frontendu
+1. `/register` – konto + branża (seed kategorii)
+2. `/settings` – wklej token KSeF (wymaga `ENCRYPTION_MASTER_KEY`)
+3. Dashboard → **Pobierz z KSeF** (sync w tle, polling statusu joba)
 
-- Next.js 16 (App Router) + Tailwind CSS
-- Recharts (wykresy) + Lucide Icons
-- `lib/api.ts` – klient z nagłówkiem `Authorization: Bearer`
+## API (wybrane endpointy)
+
+| Metoda | Ścieżka | Opis |
+|--------|---------|------|
+| GET | `/health` | Status aplikacji + PostgreSQL |
+| POST | `/api/v1/auth/register` | Rejestracja |
+| POST | `/api/v1/auth/login` | Logowanie → JWT |
+| GET | `/api/v1/stats/dashboard` | Zagregowany dashboard (1 request) |
+| GET | `/api/v1/stats/cashflow` | Przychody vs koszty |
+| POST | `/api/v1/ksef/sync-period` | Sync KSeF w tle (202 + `job_id`) |
+| GET | `/api/v1/ksef/sync-jobs/{id}` | Status synchronizacji |
+| GET | `/api/v1/settings/contractor-rules` | Reguły NIP → kategoria |
+
+Dokumentacja OpenAPI: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+## Testy
+
+```bash
+cd backend
+pytest tests/ -v
+# Testy integracyjne API wymagają działającego PostgreSQL (docker compose up -d)
+```
 
 ## Architektura RLS
 
-Każde żądanie autoryzowane JWT uruchamia `SET LOCAL app.current_tenant = '<uuid>'` przed zapytaniami SQL. Polityki PostgreSQL filtrują wiersze po `tenant_id` niezależnie od kodu aplikacji.
+Każde żądanie z JWT uruchamia `SET LOCAL app.current_tenant` przed zapytaniami SQL.  
+Tabele z RLS: `invoices`, `invoice_lines`, `tenant_categories`, `contractor_category_rules`, `ksef_sync_jobs`.
 
 ## Struktura
 
 ```
 KSEF/
-├── .gitignore          # root – venv, node_modules, .env
-├── docker-compose.yml
-├── backend/            # FastAPI + PostgreSQL + Alembic
-├── frontend/           # Next.js dashboard
+├── backend/
+│   ├── alembic/versions/   # migracje 001–012
 │   ├── app/
+│   └── tests/
+├── frontend/
+│   ├── app/                # App Router + proxy API
 │   ├── components/
-│   └── lib/api.ts
-└── docs/               # dokumentacja techniczna
+│   └── hooks/useApiQuery.ts
+└── docs/
 ```

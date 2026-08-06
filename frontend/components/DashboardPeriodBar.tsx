@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { Download, Loader2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { Download, Loader2, Square } from "lucide-react";
 
 import { HydrationSafeIcon } from "@/components/HydrationSafeIcon";
-import { ApiError, apiPost } from "@/lib/api";
+import { ApiError, apiFetch, apiPost } from "@/lib/api";
 import {
   DATE_RANGE_PRESETS,
   isValidDateRange,
@@ -12,20 +12,34 @@ import {
   SYNC_CHUNK_DAYS,
   type DateRange,
 } from "@/lib/dateRange";
-import type { KsefSyncResponse } from "@/lib/types";
+import type { KsefSyncJobCreatedResponse, KsefSyncJobResponse } from "@/lib/types";
 
-function parseApiErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    try {
-      const parsed = JSON.parse(err.message) as { detail?: string };
-      if (parsed.detail) return parsed.detail;
-    } catch {
-      // nie-JSON body
-    }
-    return err.message;
+const POLL_INTERVAL_MS = 2000;
+const TERMINAL_JOB_STATUSES = new Set(["completed", "failed", "cancelled"]);
+
+class SyncCancelledError extends Error {
+  constructor() {
+    super("Synchronizacja przerwana");
+    this.name = "SyncCancelledError";
   }
-  if (err instanceof Error) return err.message;
-  return "Błąd synchronizacji";
+}
+
+async function pollSyncJob(
+  jobId: string,
+  shouldCancel: () => boolean,
+): Promise<KsefSyncJobResponse> {
+  for (;;) {
+    if (shouldCancel()) {
+      throw new SyncCancelledError();
+    }
+
+    const job = await apiFetch<KsefSyncJobResponse>(`/ksef/sync-jobs/${jobId}`);
+    if (TERMINAL_JOB_STATUSES.has(job.status)) {
+      return job;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
 }
 
 interface DashboardPeriodBarProps {
@@ -45,7 +59,10 @@ export function DashboardPeriodBar({
   const [progress, setProgress] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
+  const [isInfo, setIsInfo] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const cancelRequestedRef = useRef(false);
+  const currentJobIdRef = useRef<string | null>(null);
 
   function applyPreset(id: string, presetRange: DateRange) {
     setActivePreset(id);
@@ -55,6 +72,26 @@ export function DashboardPeriodBar({
   function handleDateChange(field: "dateFrom" | "dateTo", value: string) {
     setActivePreset(null);
     onRangeChange({ ...range, [field]: value });
+  }
+
+  async function handleCancelSync() {
+    cancelRequestedRef.current = true;
+    const jobId = currentJobIdRef.current;
+
+    if (jobId) {
+      try {
+        await apiPost<KsefSyncJobResponse>(`/ksef/sync-jobs/${jobId}/cancel`, {});
+      } catch {
+        // UI i tak przerywa polling; backend mógł już zakończyć zadanie.
+      }
+    }
+
+    setSyncing(false);
+    setProgress(null);
+    setIsError(false);
+    setIsInfo(true);
+    setMessage("Synchronizacja przerwana.");
+    currentJobIdRef.current = null;
   }
 
   async function handleSync() {
@@ -69,6 +106,9 @@ export function DashboardPeriodBar({
     setSyncing(true);
     setMessage(null);
     setIsError(false);
+    setIsInfo(false);
+    cancelRequestedRef.current = false;
+    currentJobIdRef.current = null;
 
     let totalProcessed = 0;
     let totalFailed = 0;
@@ -76,17 +116,35 @@ export function DashboardPeriodBar({
 
     try {
       for (let index = 0; index < chunks.length; index += 1) {
+        if (cancelRequestedRef.current) {
+          throw new SyncCancelledError();
+        }
+
         const chunk = chunks[index];
         setProgress(
           `Paczka ${index + 1}/${chunks.length}: ${chunk.dateFrom}–${chunk.dateTo} (koszty + sprzedaż)`,
         );
-        const result = await apiPost<KsefSyncResponse>("/ksef/sync-period", {
+        const created = await apiPost<KsefSyncJobCreatedResponse>("/ksef/sync-period", {
           date_from: chunk.dateFrom,
           date_to: chunk.dateTo,
         });
-        totalProcessed += result.invoices_processed;
-        totalFailed += result.invoices_failed;
-        truncatedPeriods += result.truncated_periods;
+        currentJobIdRef.current = created.job_id;
+        const job = await pollSyncJob(created.job_id, () => cancelRequestedRef.current);
+
+        if (job.status === "cancelled") {
+          throw new SyncCancelledError();
+        }
+        if (job.status === "failed") {
+          throw new ApiError(job.error_message ?? "Synchronizacja nie powiodła się", 502);
+        }
+
+        const result = job.result;
+        if (result) {
+          totalProcessed += result.invoices_processed;
+          totalFailed += result.invoices_failed;
+          truncatedPeriods += result.truncated_periods;
+        }
+        currentJobIdRef.current = null;
       }
 
       let summary = `Zaimportowano ${totalProcessed} faktur z okresu ${range.dateFrom}–${range.dateTo}`;
@@ -98,14 +156,30 @@ export function DashboardPeriodBar({
       }
 
       setMessage(summary);
+      setIsInfo(false);
       onSyncComplete?.();
       window.setTimeout(() => setMessage(null), 10000);
     } catch (err) {
-      setIsError(true);
-      setMessage(parseApiErrorMessage(err));
+      if (err instanceof SyncCancelledError) {
+        setIsError(false);
+        setIsInfo(true);
+        setMessage("Synchronizacja przerwana.");
+      } else {
+        setIsError(true);
+        setIsInfo(false);
+        setMessage(
+          err instanceof ApiError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : "Błąd synchronizacji",
+        );
+      }
     } finally {
       setSyncing(false);
       setProgress(null);
+      currentJobIdRef.current = null;
+      cancelRequestedRef.current = false;
     }
   }
 
@@ -158,42 +232,55 @@ export function DashboardPeriodBar({
             <p className="text-xs text-red-600">Nieprawidłowy zakres dat.</p>
           ) : (
             <p className="text-xs text-slate-400">
-              Sync w paczkach {SYNC_CHUNK_DAYS}-dniowych · pierwsze pobranie może trwać kilka
-              minut (KSeF + kategoryzacja)
+              Sync w tle (paczki {SYNC_CHUNK_DAYS}-dniowe) · pierwsze pobranie może trwać kilka
+              minut
             </p>
           )}
         </div>
 
         <div className="flex flex-col items-end gap-2">
-          <button
-            type="button"
-            onClick={handleSync}
-            disabled={syncing || rangeInvalid || !ksefConfigured}
-            title={
-              !ksefConfigured
-                ? "Skonfiguruj token KSeF w Ustawieniach"
-                : undefined
-            }
-            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-          >
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {syncing ? (
-              <HydrationSafeIcon icon={Loader2} className="h-4 w-4 animate-spin" />
-            ) : (
-              <HydrationSafeIcon icon={Download} className="h-4 w-4" />
-            )}
-            {syncing ? "Pobieranie…" : "Pobierz z KSeF"}
-          </button>
-          {syncing && !progress ? (
-            <p className="max-w-xs text-right text-xs text-slate-500">
-              Łączenie z KSeF…
-            </p>
-          ) : null}
+              <button
+                type="button"
+                onClick={() => void handleCancelSync()}
+                className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950"
+              >
+                <HydrationSafeIcon icon={Square} className="h-4 w-4" />
+                Przerwij
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void handleSync()}
+              disabled={syncing || rangeInvalid || !ksefConfigured}
+              title={
+                !ksefConfigured
+                  ? "Skonfiguruj token KSeF w Ustawieniach"
+                  : undefined
+              }
+              className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+            >
+              {syncing ? (
+                <HydrationSafeIcon icon={Loader2} className="h-4 w-4 animate-spin" />
+              ) : (
+                <HydrationSafeIcon icon={Download} className="h-4 w-4" />
+              )}
+              {syncing ? "Pobieranie…" : "Pobierz z KSeF"}
+            </button>
+          </div>
           {progress ? (
             <p className="max-w-xs text-right text-xs text-slate-500">{progress}</p>
           ) : null}
           {message ? (
             <p
-              className={`max-w-sm text-right text-xs ${isError ? "text-red-600" : "text-emerald-600"}`}
+              className={`max-w-sm text-right text-xs ${
+                isError
+                  ? "text-red-600"
+                  : isInfo
+                    ? "text-slate-500"
+                    : "text-emerald-600"
+              }`}
             >
               {message}
             </p>

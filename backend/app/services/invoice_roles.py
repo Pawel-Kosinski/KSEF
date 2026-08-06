@@ -25,3 +25,14 @@ def resolve_contractor_name(
     if invoice_role == INVOICE_ROLE_SALES:
         return buyer_name
     return seller_name
+
+
+def resolve_contractor_nip(
+    invoice_role: str,
+    seller_nip: str,
+    buyer_nip: str,
+) -> str:
+    """Koszt: NIP sprzedawcy; sprzedaż: NIP nabywcy."""
+    if invoice_role == INVOICE_ROLE_SALES:
+        return buyer_nip
+    return seller_nip

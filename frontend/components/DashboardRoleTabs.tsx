@@ -12,13 +12,21 @@ export function DashboardRoleTabs({ role, onChange }: DashboardRoleTabsProps) {
   const roles: InvoiceRole[] = ["cost", "sales"];
 
   return (
-    <div className="flex gap-2">
+    <div
+      role="tablist"
+      aria-label="Widok dashboardu"
+      className="flex gap-2"
+    >
       {roles.map((item) => {
         const active = item === role;
         return (
           <button
             key={item}
             type="button"
+            role="tab"
+            aria-selected={active}
+            id={`dashboard-tab-${item}`}
+            aria-controls={`dashboard-panel-${item}`}
             onClick={() => onChange(item)}
             className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
               active

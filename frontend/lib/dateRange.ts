@@ -37,6 +37,17 @@ export function isValidDateRange(range: DateRange): boolean {
   return range.dateFrom <= range.dateTo;
 }
 
+/** Poprzedni okres o tej samej długości (np. poprzedni miesiąc przy „ten miesiąc”). */
+export function previousAnalogousRange(dateFrom: string, dateTo: string): DateRange {
+  const from = new Date(`${dateFrom}T12:00:00`);
+  const to = new Date(`${dateTo}T12:00:00`);
+  const spanMs = to.getTime() - from.getTime();
+  const prevTo = new Date(from);
+  prevTo.setDate(prevTo.getDate() - 1);
+  const prevFrom = new Date(prevTo.getTime() - spanMs);
+  return { dateFrom: formatDateLocal(prevFrom), dateTo: formatDateLocal(prevTo) };
+}
+
 export function splitDateRange(
   dateFrom: string,
   dateTo: string,

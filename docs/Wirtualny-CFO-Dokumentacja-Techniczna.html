@@ -533,8 +533,8 @@ KSEF/
   <li>Ollama z modelem <code>qwen2.5:7b</code> na <code>http://localhost:11434</code></li>
   <li><code>.venv\Scripts\uvicorn app.main:app --reload --port 8000</code></li>
   <li><code>.venv\Scripts\python scripts\test_etl_pipeline.py</code> — załadowanie danych testowych</li>
-  <li><code>.venv\Scripts\python scripts\create_dev_token.py --nip 9998887776</code> — token JWT</li>
-  <li>Frontend: <code>NEXT_PUBLIC_DEV_TOKEN</code> w <code>.env.local</code>, <code>npm run dev</code></li>
+  <li><code>.venv\Scripts\python scripts\create_dev_token.py --nip 9998887776</code> — opcjonalnie, do testów API poza przeglądarką</li>
+  <li>Frontend: <code>BACKEND_API_URL=http://127.0.0.1:8000</code> w <code>frontend/.env.local</code>, <code>npm run dev</code> — logowanie przez <code>/login</code> (cookie JWT)</li>
 </ol>
 
 <div class="warn">
@@ -748,11 +748,12 @@ app/main.py
 <h3>6.2. Pełna lista endpointów</h3>
 <table>
   <tr><th>Metoda</th><th>Ścieżka</th><th>Auth</th><th>Opis</th></tr>
-  <tr><td>GET</td><td>/health</td><td>Nie</td><td>Health check aplikacji</td></tr>
+  <tr><td>GET</td><td>/health</td><td>Nie</td><td>Health check (PostgreSQL + Ollama)</td></tr>
   <tr><td>GET</td><td>/api/v1/me</td><td>JWT</td><td><code>tenant_id</code>, <code>sub</code> z tokena</td></tr>
-  <tr><td>GET</td><td>/api/v1/invoice-lines</td><td>JWT+RLS</td><td>Lista wierszy (max 100) — legacy</td></tr>
-  <tr><td>GET</td><td>/api/v1/invoices</td><td>JWT+RLS</td><td>Lista faktur; query: <code>role</code>, <code>limit</code></td></tr>
+  <tr><td>GET</td><td>/api/v1/invoices</td><td>JWT+RLS</td><td>Lista faktur; query: <code>role</code>, <code>category</code>, <code>limit</code></td></tr>
   <tr><td>GET</td><td>/api/v1/invoices/{id}</td><td>JWT+RLS</td><td>Szczegóły faktury + wszystkie pozycje</td></tr>
+  <tr><td>GET</td><td>/api/v1/stats/dashboard</td><td>JWT+RLS</td><td>Agregat KPI + wykresy (summary, trend, cashflow, struktura, top kontrahenci)</td></tr>
+  <tr><td>GET</td><td>/api/v1/stats/cashflow</td><td>JWT+RLS</td><td>Przychody vs koszty w okresie</td></tr>
   <tr><td>GET</td><td>/api/v1/stats/cost-structure</td><td>JWT+RLS</td><td>Struktura wg kategorii AI (cost) lub pozycji (sales)</td></tr>
   <tr><td>GET</td><td>/api/v1/stats/trend</td><td>JWT+RLS</td><td>Trend miesięczny netto</td></tr>
   <tr><td>GET</td><td>/api/v1/stats/top-counterparties</td><td>JWT+RLS</td><td>Top dostawcy (cost) lub klienci (sales)</td></tr>
@@ -1202,13 +1203,12 @@ GET /api/v1/invoices?role=sales
 <h3>12.2. Konfiguracja (<span class="file-path">frontend/.env.local</span>)</h3>
 <table>
   <tr><th>Zmienna</th><th>Przykład</th><th>Mechanizm</th></tr>
-  <tr><td>NEXT_PUBLIC_API_BASE_URL</td><td>http://127.0.0.1:8000/api/v1</td><td>Bazowy URL w <code>apiFetch</code></td></tr>
-  <tr><td>NEXT_PUBLIC_DEV_TOKEN</td><td>JWT HS256</td><td>Wstrzykiwany jako <code>Authorization: Bearer</code></td></tr>
+  <tr><td>BACKEND_API_URL</td><td>http://127.0.0.1:8000</td><td>Adres backendu dla proxy Next.js (<code>app/api/v1/[...path]/route.ts</code>)</td></tr>
 </table>
 <p>
-  Token musi zawierać <code>tenant_id</code> zgodny z danymi w bazie i być podpisany tym samym
-  <code>JWT_SECRET_KEY</code> co backend. Generowanie: <code>create_dev_token.py --nip &lt;NIP&gt;</code>.
-  Po zmianie tokena wymagany restart <code>npm run dev</code> (zmienne NEXT_PUBLIC_*).
+  Uwierzytelnianie odbywa się przez formularz <code>/login</code> — JWT trafia do cookie <code>auth_token</code>
+  (httpOnly). Middleware Next.js sprawdza ważność tokena (<code>exp</code>) i przekierowuje na login przy wygaśnięciu.
+  Proxy API przy odpowiedzi 401 czyści cookie.
 </p>
 
 <h3>12.3. Klient HTTP (<span class="file-path">frontend/lib/api.ts</span>)</h3>

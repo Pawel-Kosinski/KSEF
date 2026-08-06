@@ -1,7 +1,8 @@
 """Schematy API synchronizacji KSeF."""
 
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -56,3 +57,20 @@ class KsefSyncResponse(BaseModel):
     chunks_processed: int = 0
     truncated_periods: int = 0
     errors: list[str] = Field(default_factory=list)
+
+
+class KsefSyncJobResponse(BaseModel):
+    id: UUID
+    status: str
+    date_from: date
+    date_to: date
+    progress_message: str | None = None
+    error_message: str | None = None
+    result: KsefSyncResponse | None = None
+    created_at: datetime
+    completed_at: datetime | None = None
+
+
+class KsefSyncJobCreatedResponse(BaseModel):
+    job_id: UUID
+    status: str = "pending"

@@ -22,6 +22,12 @@ class InvoiceListItem(BaseModel):
     total_vat: Decimal | None = None
     total_gross: Decimal | None = None
     line_count: int
+    primary_category_main: str | None = None
+    primary_category_sub: str | None = None
+    primary_category_source: str | None = Field(
+        default=None,
+        description="ai | rule | user | fallback",
+    )
 
 
 class InvoiceLineRead(BaseModel):
@@ -34,6 +40,49 @@ class InvoiceLineRead(BaseModel):
     ai_category_main: str | None = None
     ai_category_sub: str | None = None
     ai_confidence: int | None = None
+    category_source: str | None = Field(
+        default=None,
+        description="ai | rule | user | fallback",
+    )
+
+
+class InvoiceLineCategoryUpdateResponse(BaseModel):
+    id: UUID
+    line_number: int
+    ai_category_main: str | None
+    ai_category_sub: str | None
+    ai_confidence: int | None
+    category_source: str | None
+    invoice_primary_category_main: str | None = None
+    invoice_primary_category_sub: str | None = None
+    invoice_primary_category_source: str | None = None
+    rule_saved: bool = False
+    contractor_nip: str | None = None
+
+
+class InvoiceLineCategoryUpdate(BaseModel):
+    category_main: str = Field(min_length=1, max_length=128)
+    category_sub: str | None = Field(default=None, max_length=128)
+    learn_rule: bool = Field(
+        default=False,
+        description="Zapisz regułę NIP kontrahenta dla przyszłych faktur",
+    )
+
+
+class InvoiceCategoryUpdate(BaseModel):
+    category_main: str = Field(min_length=1, max_length=128)
+    category_sub: str | None = Field(default=None, max_length=128)
+
+
+class InvoiceCategoryUpdateResponse(BaseModel):
+    id: UUID
+    primary_category_main: str | None
+    primary_category_sub: str | None
+    primary_category_source: str | None
+
+
+class CategoryListResponse(BaseModel):
+    categories: list[str]
 
 
 class InvoiceDetail(BaseModel):
@@ -50,4 +99,7 @@ class InvoiceDetail(BaseModel):
     total_net: Decimal
     total_vat: Decimal | None = None
     total_gross: Decimal | None = None
+    primary_category_main: str | None = None
+    primary_category_sub: str | None = None
+    primary_category_source: str | None = None
     lines: list[InvoiceLineRead]

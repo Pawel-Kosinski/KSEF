@@ -34,8 +34,8 @@ def test_build_dynamic_schema_rejects_unknown_category():
 def test_system_prompt_injects_categories():
     categories = ["Kategoria A", "Kategoria B"]
     prompt = build_system_prompt(categories)
-    assert "- Kategoria A" in prompt
-    assert "- Kategoria B" in prompt
+    assert '"Kategoria A"' in prompt
+    assert '"Kategoria B"' in prompt
     assert "Materiały i Surowce" not in prompt
 
 
