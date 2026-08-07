@@ -4,9 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BarChart3, LogOut, Settings } from "lucide-react";
 
+import { ChatToggleButton } from "@/components/ChatPanel";
 import { HydrationSafeIcon } from "@/components/HydrationSafeIcon";
 
-export function DashboardHeader() {
+interface DashboardHeaderProps {
+  chatOpen?: boolean;
+  onChatToggle?: () => void;
+}
+
+export function DashboardHeader({ chatOpen, onChatToggle }: DashboardHeaderProps = {}) {
   const router = useRouter();
 
   async function handleLogout() {
@@ -33,6 +39,9 @@ export function DashboardHeader() {
         </div>
 
         <div className="flex items-center gap-2">
+          {onChatToggle ? (
+            <ChatToggleButton open={chatOpen ?? false} onClick={onChatToggle} />
+          ) : null}
           <Link
             href="/settings"
             className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"

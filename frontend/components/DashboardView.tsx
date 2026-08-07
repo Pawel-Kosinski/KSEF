@@ -8,6 +8,10 @@ import {
   CATEGORY_PANEL_DEFAULT_WIDTH,
   CategoryAnalysisDialog,
 } from "@/components/CategoryAnalysisDialog";
+import {
+  CHAT_PANEL_DEFAULT_WIDTH,
+  ChatPanel,
+} from "@/components/ChatPanel";
 import { CostStructureChart } from "@/components/CostStructureChart";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { DashboardPeriodBar } from "@/components/DashboardPeriodBar";
@@ -36,6 +40,9 @@ export function DashboardView() {
   const [selectedCategoryForAnalysis, setSelectedCategoryForAnalysis] = useState<
     string | null
   >(null);
+  const [chatOpen, setChatOpen] = useState(true);
+  const [chatPinned, setChatPinned] = useState(true);
+  const [chatPanelWidth, setChatPanelWidth] = useState(CHAT_PANEL_DEFAULT_WIDTH);
 
   const { data: ksefStatus } = useApiQuery<KsefSettingsStatus>(
     "/settings/ksef",
@@ -95,16 +102,20 @@ export function DashboardView() {
     setSelectedCategoryForAnalysis(null);
   }
 
-  const contentOffset =
+  const contentOffsetLeft =
     categoryAnalysisOpen && categoryAnalysisPinned ? categoryPanelWidth : 0;
+  const contentOffsetRight = chatOpen && chatPinned ? chatPanelWidth : 0;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <div
         className="transition-[margin] duration-200 ease-out"
-        style={{ marginLeft: contentOffset }}
+        style={{ marginLeft: contentOffsetLeft, marginRight: contentOffsetRight }}
       >
-        <DashboardHeader />
+        <DashboardHeader
+          chatOpen={chatOpen}
+          onChatToggle={() => setChatOpen((value) => !value)}
+        />
         <main className="mx-auto max-w-7xl px-6 py-8">
           {ksefConfigured === false ? <KsefSetupBanner /> : null}
           <DashboardPeriodBar
@@ -174,6 +185,15 @@ export function DashboardView() {
         onClose={closeCategoryAnalysis}
         onPinnedChange={setCategoryAnalysisPinned}
         onWidthChange={setCategoryPanelWidth}
+      />
+
+      <ChatPanel
+        open={chatOpen}
+        pinned={chatPinned}
+        width={chatPanelWidth}
+        onClose={() => setChatOpen(false)}
+        onPinnedChange={setChatPinned}
+        onWidthChange={setChatPanelWidth}
       />
     </div>
   );

@@ -14,19 +14,27 @@ from app.dependencies.tenant import TenantContext, get_current_tenant, get_rls_s
 from app.schemas.chat import ChatMessageRequest
 from app.services.llm.agent import ChatAgentService
 from app.services.llm.factory import get_llm_service
-from app.services.llm.tools import get_tool_registry
-from app.services.llm.tools.context import ToolExecutionContext
+from app.services.llm.tools import ToolExecutionContext, get_tool_registry
 
 router = APIRouter(prefix="/chat", tags=["Virtual CFO Chat"])
 
 
 def _chat_agent() -> ChatAgentService:
     settings = get_settings()
-    if not settings.anthropic_api_key.strip():
+    provider = settings.llm_provider.lower().strip()
+
+    if provider == "claude" and not settings.anthropic_api_key.strip():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Chat AI jest niedostępny – skonfiguruj ANTHROPIC_API_KEY",
         )
+
+    if provider == "bedrock" and not settings.aws_default_region.strip():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Chat AI jest niedostępny – skonfiguruj AWS_DEFAULT_REGION",
+        )
+
     return ChatAgentService(llm=get_llm_service(), tools=get_tool_registry())
 
 

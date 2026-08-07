@@ -34,8 +34,15 @@ class Settings(BaseSettings):
     ollama_timeout_sec: float = 45.0
     etl_classification_concurrency: int = 3
 
-    # Virtual CFO Chat – Claude (Anthropic API)
-    llm_provider: str = "claude"
+    # Virtual CFO Chat – LLM (domyślnie Amazon Bedrock)
+    llm_provider: str = "bedrock"
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    aws_default_region: str = "eu-central-1"
+    bedrock_model_id: str = "eu.anthropic.claude-3-5-haiku-20241022-v1:0"
+    bedrock_max_tokens: int = 4096
+
+    # Opcjonalnie: bezpośrednie Anthropic API (legacy)
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-3-5-sonnet-20241022"
     anthropic_max_tokens: int = 4096

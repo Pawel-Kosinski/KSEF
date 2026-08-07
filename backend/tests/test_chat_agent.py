@@ -11,8 +11,7 @@ import pytest
 
 from app.services.llm.agent import ChatAgentService
 from app.services.llm.base import BaseLLMService
-from app.services.llm.tools import build_default_tool_registry
-from app.services.llm.tools.context import ToolExecutionContext
+from app.services.llm.tools import ToolExecutionContext, build_default_tool_registry
 from app.services.llm.types import (
     LLMMessage,
     LLMStreamEvent,

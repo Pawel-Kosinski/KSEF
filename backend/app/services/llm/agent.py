@@ -7,8 +7,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from app.services.llm.base import BaseLLMService
-from app.services.llm.tools.context import ToolExecutionContext
-from app.services.llm.tools.registry import ToolRegistry
+from app.services.llm.tools import ToolExecutionContext, ToolRegistry
 from app.services.llm.types import (
     LLMMessage,
     ToolCall,

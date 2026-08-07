@@ -57,6 +57,16 @@ class ToolDefinition(BaseModel):
             "input_schema": self.input_schema,
         }
 
+    def to_bedrock_tool_spec(self) -> dict[str, Any]:
+        """Specyfikacja narzędzia dla AWS Bedrock Converse API."""
+        return {
+            "toolSpec": {
+                "name": self.name,
+                "description": self.description,
+                "inputSchema": {"json": self.input_schema},
+            }
+        }
+
 
 class LLMStreamEventType:
     TEXT_DELTA = "text_delta"
