@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     ollama_timeout_sec: float = 45.0
     etl_classification_concurrency: int = 3
 
+    # Virtual CFO Chat – Claude (Anthropic API)
+    llm_provider: str = "claude"
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-3-5-sonnet-20241022"
+    anthropic_max_tokens: int = 4096
+
 
 def validate_settings(settings: Settings) -> None:
     """Walidacja konfiguracji przy starcie – błędy krytyczne w produkcji."""
